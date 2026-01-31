@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(const MyApp());
@@ -7,116 +9,254 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Arduino BLE Reader',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const BLEHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class BLEHomePage extends StatefulWidget {
+  const BLEHomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<BLEHomePage> createState() => _BLEHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _BLEHomePageState extends State<BLEHomePage> {
+  // BLE variables
+  BluetoothDevice? connectedDevice;
+  List<BluetoothDevice> devicesList = [];
+  bool isScanning = false;
 
-  void _incrementCounter() {
+  // Data variables
+  String receivedData = "No data yet";
+  List<String> dataHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    requestPermissions();
+  }
+
+  // Request Bluetooth permissions
+  Future<void> requestPermissions() async {
+    await Permission.bluetoothScan.request();
+    await Permission.bluetoothConnect.request();
+    await Permission.location.request();
+  }
+
+  // Scan for BLE devices
+  Future<void> startScan() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      isScanning = true;
+      devicesList.clear();
     });
+
+    // Start scanning
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
+
+    // Listen to scan results
+    FlutterBluePlus.scanResults.listen((results) {
+      for (ScanResult result in results) {
+        if (!devicesList.contains(result.device)) {
+          setState(() {
+            devicesList.add(result.device);
+          });
+        }
+      }
+    });
+
+    // Wait for scan to complete
+    await Future.delayed(const Duration(seconds: 4));
+    await FlutterBluePlus.stopScan();
+
+    setState(() {
+      isScanning = false;
+    });
+  }
+
+  // Connect to a device
+  Future<void> connectToDevice(BluetoothDevice device) async {
+    try {
+      await device.connect();
+      setState(() {
+        connectedDevice = device;
+      });
+
+      // Discover services
+      List<BluetoothService> services = await device.discoverServices();
+
+      // Find the service and characteristic you want to read from
+      for (BluetoothService service in services) {
+        for (BluetoothCharacteristic characteristic
+            in service.characteristics) {
+          // Subscribe to notifications (Arduino sends data)
+          if (characteristic.properties.notify) {
+            await characteristic.setNotifyValue(true);
+            characteristic.lastValueStream.listen((value) {
+              // Convert bytes to string
+              String csvData = String.fromCharCodes(value);
+              setState(() {
+                receivedData = csvData;
+                dataHistory.insert(0, csvData);
+                if (dataHistory.length > 50) {
+                  dataHistory.removeLast(); // Keep only last 50 readings
+                }
+              });
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error connecting: $e");
+    }
+  }
+
+  // Disconnect from device
+  Future<void> disconnectDevice() async {
+    if (connectedDevice != null) {
+      await connectedDevice!.disconnect();
+      setState(() {
+        connectedDevice = null;
+        receivedData = "Disconnected";
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Arduino BLE Reader'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Column(
+        children: [
+          // Connection status
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: connectedDevice != null
+                ? Colors.green[100]
+                : Colors.grey[200],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  connectedDevice != null
+                      ? 'Connected to: ${connectedDevice!.platformName}'
+                      : 'Not connected',
+                  style: const TextStyle(fontSize: 16),
+                ),
+                if (connectedDevice != null)
+                  ElevatedButton(
+                    onPressed: disconnectDevice,
+                    child: const Text('Disconnect'),
+                  ),
+              ],
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+          ),
+
+          // Current data display
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.blue),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Latest Data:',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  receivedData,
+                  style: const TextStyle(fontSize: 24, color: Colors.blue),
+                ),
+              ],
+            ),
+          ),
+
+          // Data history
+          Expanded(
+            child: connectedDevice == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Scan for devices to get started'),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          onPressed: isScanning ? null : startScan,
+                          icon: isScanning
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.bluetooth_searching),
+                          label: Text(
+                            isScanning ? 'Scanning...' : 'Scan for Devices',
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Device list
+                        if (devicesList.isNotEmpty)
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: devicesList.length,
+                              itemBuilder: (context, index) {
+                                final device = devicesList[index];
+                                return ListTile(
+                                  title: Text(
+                                    device.platformName.isNotEmpty
+                                        ? device.platformName
+                                        : 'Unknown Device',
+                                  ),
+                                  subtitle: Text(device.remoteId.toString()),
+                                  trailing: ElevatedButton(
+                                    onPressed: () => connectToDevice(device),
+                                    child: const Text('Connect'),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: dataHistory.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        leading: CircleAvatar(child: Text('${index + 1}')),
+                        title: Text(dataHistory[index]),
+                        subtitle: Text('Reading ${index + 1}'),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    disconnectDevice();
+    super.dispose();
   }
 }
