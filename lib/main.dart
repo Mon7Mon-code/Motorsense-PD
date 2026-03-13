@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'app_theme.dart';
+import 'main_navigation.dart';
 
 void main() {
   runApp(const MyApp());
@@ -12,251 +12,155 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Arduino BLE Reader',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const BLEHomePage(),
+      title: 'Parkinsons Tracker',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      home: const ScanScreen(),
     );
   }
 }
 
-class BLEHomePage extends StatefulWidget {
-  const BLEHomePage({super.key});
+class ScanScreen extends StatefulWidget {
+  const ScanScreen({super.key});
 
   @override
-  State<BLEHomePage> createState() => _BLEHomePageState();
+  State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _BLEHomePageState extends State<BLEHomePage> {
-  // BLE variables
-  BluetoothDevice? connectedDevice;
-  List<BluetoothDevice> devicesList = [];
+class _ScanScreenState extends State<ScanScreen> {
+  List<String> devices = [];
   bool isScanning = false;
 
-  // Data variables
-  String receivedData = "No data yet";
-  List<String> dataHistory = [];
-
-  @override
-  void initState() {
-    super.initState();
-    requestPermissions();
-  }
-
-  // Request Bluetooth permissions
-  Future<void> requestPermissions() async {
-    await Permission.bluetoothScan.request();
-    await Permission.bluetoothConnect.request();
-    await Permission.location.request();
-  }
-
-  // Scan for BLE devices
-  Future<void> startScan() async {
+  void startScan() {
     setState(() {
       isScanning = true;
-      devicesList.clear();
+      devices = [];
     });
 
-    // Start scanning
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
-
-    // Listen to scan results
-    FlutterBluePlus.scanResults.listen((results) {
-      for (ScanResult result in results) {
-        if (!devicesList.contains(result.device)) {
-          setState(() {
-            devicesList.add(result.device);
-          });
-        }
-      }
-    });
-
-    // Wait for scan to complete
-    await Future.delayed(const Duration(seconds: 4));
-    await FlutterBluePlus.stopScan();
-
-    setState(() {
-      isScanning = false;
-    });
-  }
-
-  // Connect to a device
-  Future<void> connectToDevice(BluetoothDevice device) async {
-    try {
-      await device.connect();
+    Future.delayed(const Duration(seconds: 2), () {
       setState(() {
-        connectedDevice = device;
+        devices = [
+          'Arduino Nano 33 BLE',
+          'Fitness Tracker',
+          'Smartwatch',
+        ];
+        isScanning = false;
       });
-
-      // Discover services
-      List<BluetoothService> services = await device.discoverServices();
-
-      // Find the service and characteristic you want to read from
-      for (BluetoothService service in services) {
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          // Subscribe to notifications (Arduino sends data)
-          if (characteristic.properties.notify) {
-            await characteristic.setNotifyValue(true);
-            characteristic.lastValueStream.listen((value) {
-              // Convert bytes to string
-              String csvData = String.fromCharCodes(value);
-              setState(() {
-                receivedData = csvData;
-                dataHistory.insert(0, csvData);
-                if (dataHistory.length > 50) {
-                  dataHistory.removeLast(); // Keep only last 50 readings
-                }
-              });
-            });
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Error connecting: $e");
-    }
-  }
-
-  // Disconnect from device
-  Future<void> disconnectDevice() async {
-    if (connectedDevice != null) {
-      await connectedDevice!.disconnect();
-      setState(() {
-        connectedDevice = null;
-        receivedData = "Disconnected";
-      });
-    }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Arduino BLE Reader'),
+        title: const Text(
+          'Parkinson\'s Monitor',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
       ),
-      body: Column(
-        children: [
-          // Connection status
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: connectedDevice != null
-                ? Colors.green[100]
-                : Colors.grey[200],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  connectedDevice != null
-                      ? 'Connected to: ${connectedDevice!.platformName}'
-                      : 'Not connected',
-                  style: const TextStyle(fontSize: 16),
+      body: Padding(
+        padding: const EdgeInsets.all(AppTheme.spacingM),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Connect Your Device',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingS),
+            Text(
+              'Scan for your Arduino wearable to begin continuous monitoring',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingL),
+            
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: isScanning ? null : startScan,
+                icon: Icon(isScanning ? Icons.refresh : Icons.bluetooth_searching),
+                label: Text(
+                  isScanning ? 'Scanning...' : 'Scan for Devices',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
-                if (connectedDevice != null)
-                  ElevatedButton(
-                    onPressed: disconnectDevice,
-                    child: const Text('Disconnect'),
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusM),
                   ),
-              ],
-            ),
-          ),
-
-          // Current data display
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.blue),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Latest Data:',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  receivedData,
-                  style: const TextStyle(fontSize: 24, color: Colors.blue),
-                ),
-              ],
+              ),
             ),
-          ),
-
-          // Data history
-          Expanded(
-            child: connectedDevice == null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('Scan for devices to get started'),
-                        const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          onPressed: isScanning ? null : startScan,
-                          icon: isScanning
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.bluetooth_searching),
-                          label: Text(
-                            isScanning ? 'Scanning...' : 'Scan for Devices',
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Device list
-                        if (devicesList.isNotEmpty)
-                          Expanded(
-                            child: ListView.builder(
-                              itemCount: devicesList.length,
-                              itemBuilder: (context, index) {
-                                final device = devicesList[index];
-                                return ListTile(
-                                  title: Text(
-                                    device.platformName.isNotEmpty
-                                        ? device.platformName
-                                        : 'Unknown Device',
-                                  ),
-                                  subtitle: Text(device.remoteId.toString()),
-                                  trailing: ElevatedButton(
-                                    onPressed: () => connectToDevice(device),
-                                    child: const Text('Connect'),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                      ],
+            const SizedBox(height: AppTheme.spacingL),
+            
+            if (devices.isNotEmpty)
+              Text(
+                'Available Devices',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            const SizedBox(height: AppTheme.spacingM),
+            
+            Expanded(
+              child: ListView.separated(
+                itemCount: devices.length,
+                separatorBuilder: (context, index) => 
+                  const SizedBox(height: AppTheme.spacingM),
+                itemBuilder: (context, index) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardBackground,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                      boxShadow: [AppTheme.cardShadow],
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: dataHistory.length,
-                    itemBuilder: (context, index) {
-                      return ListTile(
-                        leading: CircleAvatar(child: Text('${index + 1}')),
-                        title: Text(dataHistory[index]),
-                        subtitle: Text('Reading ${index + 1}'),
-                      );
-                    },
-                  ),
-          ),
-        ],
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(AppTheme.spacingM),
+                      leading: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withAlpha(26),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusS),
+                        ),
+                        child: const Icon(
+                          Icons.bluetooth,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                      title: Text(
+                        devices[index],
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      subtitle: const Text('Ready to connect'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const MainNavigation(),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    disconnectDevice();
-    super.dispose();
   }
 }
