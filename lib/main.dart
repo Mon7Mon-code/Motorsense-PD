@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 import 'main_navigation.dart';
+import 'test_inference.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await testInference();
   runApp(const MyApp());
 }
 
@@ -80,7 +83,6 @@ class _ScanScreenState extends State<ScanScreen> {
               ),
             ),
             const SizedBox(height: AppTheme.spacingL),
-            
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -99,7 +101,6 @@ class _ScanScreenState extends State<ScanScreen> {
               ),
             ),
             const SizedBox(height: AppTheme.spacingL),
-            
             if (devices.isNotEmpty)
               Text(
                 'Available Devices',
@@ -110,12 +111,11 @@ class _ScanScreenState extends State<ScanScreen> {
                 ),
               ),
             const SizedBox(height: AppTheme.spacingM),
-            
             Expanded(
               child: ListView.separated(
                 itemCount: devices.length,
-                separatorBuilder: (context, index) => 
-                  const SizedBox(height: AppTheme.spacingM),
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: AppTheme.spacingM),
                 itemBuilder: (context, index) {
                   return Container(
                     decoration: BoxDecoration(
