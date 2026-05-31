@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 import 'main_navigation.dart';
-import 'test_inference.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await testInference();
   runApp(const MyApp());
 }
 
@@ -42,11 +40,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
     Future.delayed(const Duration(seconds: 2), () {
       setState(() {
-        devices = [
-          'Arduino Nano 33 BLE',
-          'Fitness Tracker',
-          'Smartwatch',
-        ];
+        devices = ['Arduino Nano 33 BLE', 'Fitness Tracker', 'Smartwatch'];
         isScanning = false;
       });
     });
@@ -77,10 +71,7 @@ class _ScanScreenState extends State<ScanScreen> {
             const SizedBox(height: AppTheme.spacingS),
             Text(
               'Scan for your Arduino wearable to begin continuous monitoring',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppTheme.textSecondary,
-              ),
+              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: AppTheme.spacingL),
             SizedBox(
@@ -88,10 +79,15 @@ class _ScanScreenState extends State<ScanScreen> {
               height: 50,
               child: ElevatedButton.icon(
                 onPressed: isScanning ? null : startScan,
-                icon: Icon(isScanning ? Icons.refresh : Icons.bluetooth_searching),
+                icon: Icon(
+                  isScanning ? Icons.refresh : Icons.bluetooth_searching,
+                ),
                 label: Text(
                   isScanning ? 'Scanning...' : 'Scan for Devices',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
