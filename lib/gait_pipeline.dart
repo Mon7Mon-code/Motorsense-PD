@@ -3,15 +3,22 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'ble_service.dart';
 import 'gait_inference.dart';
+import 'signal_utils.dart';
 
 /// One complete gait analysis result
 class GaitAnalysisResult {
   final double probability;
   final bool isImpaired;
-  final int severityLevel;       // 0=healthy,1=mild,2=moderate,3=severe,4=very severe
+  final int severityLevel;        // 0=healthy,1=mild,2=moderate,3=severe,4=very severe
   final String severityLabel;
   final DateTime timestamp;
   final int samplesUsed;
+
+  // Raw feature values exposed for downstream use (bradykinesia, UI display).
+  final double? cadenceStepsPerMin;
+  final double? armSwingAmplitudeDeg; // RA_AMP_U (right arm, degrees)
+  final double? strideTimeCV;         // coefficient of variation (%)
+  final double? walkingSpeedMs;       // estimated walking speed (m/s)
 
   GaitAnalysisResult({
     required this.probability,
@@ -20,12 +27,34 @@ class GaitAnalysisResult {
     required this.severityLabel,
     required this.timestamp,
     required this.samplesUsed,
+    this.cadenceStepsPerMin,
+    this.armSwingAmplitudeDeg,
+    this.strideTimeCV,
+    this.walkingSpeedMs,
   });
+
+  /// Bradykinesia severity inferred from cadence and arm swing amplitude.
+  /// Thresholds are based on published Parkinson's gait norms.
+  int get bradykinesiaSeverity {
+    final cad = cadenceStepsPerMin;
+    final arm = armSwingAmplitudeDeg;
+    if (cad == null && arm == null) return 0;
+    if ((cad != null && cad < 50)  || (arm != null && arm < 2))  return 4;
+    if ((cad != null && cad < 70)  || (arm != null && arm < 5))  return 3;
+    if ((cad != null && cad < 85)  || (arm != null && arm < 10)) return 2;
+    if ((cad != null && cad < 100) || (arm != null && arm < 15)) return 1;
+    return 0;
+  }
+
+  String get bradykinesiaLabel =>
+      const ['Normal', 'Mild', 'Moderate', 'Severe', 'Very Severe'][bradykinesiaSeverity];
 
   @override
   String toString() =>
       'GaitAnalysisResult(prob=${probability.toStringAsFixed(3)}, '
-      'severity=$severityLevel/$severityLabel, samples=$samplesUsed)';
+      'severity=$severityLevel/$severityLabel, '
+      'bradykinesia=$bradykinesiaSeverity/$bradykinesiaLabel, '
+      'samples=$samplesUsed)';
 }
 
 /// Buffers raw IMU samples from BleService, extracts the 27-feature vector,
@@ -64,11 +93,16 @@ class GaitPipeline extends ChangeNotifier {
   GaitAnalysisResult? _latestResult;
   bool   _isAnalysing = false;
 
-  GaitAnalysisResult? get latestResult  => _latestResult;
-  bool                get isAnalysing   => _isAnalysing;
-  String?             get lastError     => _lastError;
-  int                 get bufferSize    => _buffer.length;
-  bool                get engineReady   => _engineReady;
+  // 7-day rolling trend: (timestamp, bradykinesiaSeverity) pairs.
+  final List<(DateTime, int)> _bradykinesiaTrend = [];
+
+  GaitAnalysisResult?    get latestResult       => _latestResult;
+  bool                   get isAnalysing        => _isAnalysing;
+  String?                get lastError          => _lastError;
+  int                    get bufferSize         => _buffer.length;
+  bool                   get engineReady        => _engineReady;
+  List<(DateTime, int)>  get bradykinesiaTrend  =>
+      List.unmodifiable(_bradykinesiaTrend);
 
   // ── Output stream ─────────────────────────────────────────────────────────
   final _resultController = StreamController<GaitAnalysisResult>.broadcast();
@@ -158,18 +192,29 @@ class GaitPipeline extends ChangeNotifier {
     final features = _extractFeatures(snapshot);
     final gaitResult = await _engine.predict(features);
 
+    final now = DateTime.now();
     final result = GaitAnalysisResult(
-      probability: gaitResult.probability,
-      isImpaired: gaitResult.isImpaired,
-      severityLevel: gaitResult.severity,
-      severityLabel: gaitResult.severityLabel,
-      timestamp: DateTime.now(),
-      samplesUsed: snapshot.length,
+      probability:          gaitResult.probability,
+      isImpaired:           gaitResult.isImpaired,
+      severityLevel:        gaitResult.severity,
+      severityLabel:        gaitResult.severityLabel,
+      timestamp:            now,
+      samplesUsed:          snapshot.length,
+      cadenceStepsPerMin:   features['CAD_U'],
+      armSwingAmplitudeDeg: features['RA_AMP_U'],
+      strideTimeCV:         features['STR_CV_U'],
+      walkingSpeedMs:       features['SP_U'],
     );
 
     _latestResult = result;
     _resultController.add(result);
     _lastError = null;
+
+    // Update 7-day trend.
+    _bradykinesiaTrend.add((now, result.bradykinesiaSeverity));
+    final cutoff = now.subtract(const Duration(days: 7));
+    _bradykinesiaTrend.removeWhere((e) => e.$1.isBefore(cutoff));
+
     debugPrint('[GaitPipeline] $result');
   } catch (e) {
     _lastError = 'Analysis failed: $e';
@@ -199,7 +244,7 @@ class GaitPipeline extends ChangeNotifier {
 
     // ── Accelerometer vertical (Z) for gait timing ─────────────────────────
     final accZ = samples.map((s) => s.accZ).toList();
-    final peaks = _detectPeaks(accZ, _sampleRateHz);
+    final peaks = detectPeaks(accZ, _sampleRateHz);
 
     double? cad;
     double? strCv;
@@ -209,9 +254,9 @@ class GaitPipeline extends ChangeNotifier {
       for (int i = 1; i < peaks.length; i++) {
         intervals.add((peaks[i] - peaks[i - 1]) / _sampleRateHz);
       }
-      final meanInterval = _mean(intervals);
+      final meanInterval = signalMean(intervals);
       cad   = meanInterval > 0 ? (60.0 / meanInterval) : null;
-      strCv = meanInterval > 0 ? (_std(intervals) / meanInterval * 100) : null;
+      strCv = meanInterval > 0 ? (signalStd(intervals) / meanInterval * 100) : null;
       // Walking speed proxy: cadence × 0.75m (avg step length)
       sp    = cad != null ? (cad * 0.75 / 60.0) : null;
     }
@@ -262,8 +307,8 @@ class GaitPipeline extends ChangeNotifier {
     }
 
     // Average amplitude per arm (degrees) — PPMI RA_AMP_U / LA_AMP_U
-    final raAmp = rightCycleAmps.isNotEmpty ? _mean(rightCycleAmps) : null;
-    final laAmp = leftCycleAmps.isNotEmpty  ? _mean(leftCycleAmps)  : null;
+    final raAmp = rightCycleAmps.isNotEmpty ? signalMean(rightCycleAmps) : null;
+    final laAmp = leftCycleAmps.isNotEmpty  ? signalMean(leftCycleAmps)  : null;
 
     // Only flag as active arm swing if amplitude exceeds minimum threshold
     final hasArmswing = (raAmp != null && raAmp >= _minArmSwingDeg &&
@@ -297,7 +342,7 @@ class GaitPipeline extends ChangeNotifier {
     final accX = samples.map((s) => s.accX).toList();
     final accY = samples.map((s) => s.accY).toList();
 
-    final swVel = _rms([...accX, ...accY]);
+    final swVel = signalRms([...accX, ...accY]);
 
     double swPath = 0.0;
     for (int i = 1; i < samples.length; i++) {
@@ -306,7 +351,7 @@ class GaitPipeline extends ChangeNotifier {
       swPath += sqrt(dAP * dAP + dML * dML) * dt;
     }
 
-    final swFreq = _dominantFreq(accY, _sampleRateHz);
+    final swFreq = zeroCrossFreq(accY, _sampleRateHz);
     const hasSway = 1.0;
 
     // CVStrideTime reused from stride intervals
@@ -341,60 +386,11 @@ class GaitPipeline extends ChangeNotifier {
       'SampEntropyV'      : null,
       'stepAsymV'         : null,
       'StepVelocitycmsec' : sp != null ? sp * 100 : null,
-      'rmsV'              : _rms(accZ),
+      'rmsV'              : signalRms(accZ),
       'has_axivity'       : 0.0,
       // Subgroup
       'GAIT_SUBGROUP'     : 0.0,
     };
   }
 
-  // ── DSP helpers ───────────────────────────────────────────────────────────
-
-  /// Simple peak detection: local maxima above mean + 0.3*std threshold
-  List<int> _detectPeaks(List<double> signal, int fs) {
-    final mu      = _mean(signal);
-    final sd      = _std(signal);
-    final thr     = mu + 0.3 * sd;
-    final minDist = (fs * 0.35).round(); // min 350ms between peaks
-
-    final peaks = <int>[];
-    for (int i = 1; i < signal.length - 1; i++) {
-      if (signal[i] > thr &&
-          signal[i] > signal[i - 1] &&
-          signal[i] > signal[i + 1]) {
-        if (peaks.isEmpty || (i - peaks.last) >= minDist) {
-          peaks.add(i);
-        }
-      }
-    }
-    return peaks;
-  }
-
-  double _mean(List<double> x) {
-    if (x.isEmpty) return 0;
-    return x.reduce((a, b) => a + b) / x.length;
-  }
-
-  double _std(List<double> x) {
-    if (x.length < 2) return 0;
-    final mu = _mean(x);
-    final sq = x.map((v) => (v - mu) * (v - mu));
-    return sqrt(sq.reduce((a, b) => a + b) / (x.length - 1));
-  }
-
-  double _rms(List<double> x) {
-    if (x.isEmpty) return 0;
-    return sqrt(x.map((v) => v * v).reduce((a, b) => a + b) / x.length);
-  }
-
-  /// Dominant frequency via zero-crossing rate (lightweight FFT approximation)
-  double _dominantFreq(List<double> signal, int fs) {
-    if (signal.length < 2) return 0;
-    final mu = _mean(signal);
-    int crossings = 0;
-    for (int i = 1; i < signal.length; i++) {
-      if ((signal[i - 1] - mu) * (signal[i] - mu) < 0) crossings++;
-    }
-    return (crossings / 2.0) / (signal.length / fs);
-  }
 }
