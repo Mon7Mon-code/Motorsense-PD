@@ -144,32 +144,41 @@ class GaitPipeline extends ChangeNotifier {
   // ── Feature extraction & inference ────────────────────────────────────────
 
   Future<void> _runAnalysis() async {
-    if (_buffer.length < _minSamplesRequired) {
-      debugPrint('[GaitPipeline] Not enough samples yet: ${_buffer.length}');
-      return;
-    }
-    if (_isAnalysing) return;
-
-    _isAnalysing = true;
-    notifyListeners();
-
-    try {
-      final snapshot = List<ImuSample>.from(_buffer);
-      final features = _extractFeatures(snapshot);
-      final result   = await _engine.predict(features);
-
-      _latestResult = result;
-      _resultController.add(result);
-      _lastError = null;
-      debugPrint('[GaitPipeline] $result');
-    } catch (e) {
-      _lastError = 'Analysis failed: $e';
-      debugPrint('[GaitPipeline] $_lastError');
-    } finally {
-      _isAnalysing = false;
-      notifyListeners();
-    }
+  if (_buffer.length < _minSamplesRequired) {
+    debugPrint('[GaitPipeline] Not enough samples yet: ${_buffer.length}');
+    return;
   }
+  if (_isAnalysing) return;
+
+  _isAnalysing = true;
+  notifyListeners();
+
+  try {
+    final snapshot = List<ImuSample>.from(_buffer);
+    final features = _extractFeatures(snapshot);
+    final gaitResult = await _engine.predict(features);
+
+    final result = GaitAnalysisResult(
+      probability: gaitResult.probability,
+      isImpaired: gaitResult.isImpaired,
+      severityLevel: gaitResult.severity,
+      severityLabel: gaitResult.severityLabel,
+      timestamp: DateTime.now(),
+      samplesUsed: snapshot.length,
+    );
+
+    _latestResult = result;
+    _resultController.add(result);
+    _lastError = null;
+    debugPrint('[GaitPipeline] $result');
+  } catch (e) {
+    _lastError = 'Analysis failed: $e';
+    debugPrint('[GaitPipeline] $_lastError');
+  } finally {
+    _isAnalysing = false;
+    notifyListeners();
+  }
+}
 
   /// Trigger an immediate analysis (e.g. for UI "Analyse Now" button)
   Future<void> analyseNow() => _runAnalysis();
