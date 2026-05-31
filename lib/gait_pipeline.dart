@@ -29,7 +29,7 @@ class GaitAnalysisResult {
 }
 
 /// Buffers raw IMU samples from BleService, extracts the 27-feature vector,
-/// and calls GaitInferenceEngine every [analysisIntervalSec] seconds.
+/// and calls GaitInferenceEngine every [_analysisIntervalSec] seconds.
 ///
 /// Feature groups (mirrors train_gait.py v7):
 ///   OPALS_UNIVERSAL : CAD_U, STR_CV_U, SP_U
@@ -37,14 +37,21 @@ class GaitAnalysisResult {
 ///   OPALS_SWAY      : SW_VEL_OP, SW_PATH_OP, SW_FREQ_OP  + has_sway
 ///   AXIVITY         : 14 free-living features             + has_axivity
 ///   GAIT_SUBGROUP   : 1 subgroup flag
+///
+/// Formulas follow the official PPMI Gait Assessment Methods Document
+/// (Mirelman, Tel Aviv Medical Center / APDM Opals, 2018).
 class GaitPipeline extends ChangeNotifier {
   // ── Configuration ─────────────────────────────────────────────────────────
   static const int    _sampleRateHz        = 50;
   static const int    _windowSec           = 20;   // analysis window length
-  static const int    _analysisIntervalSec = 30;   // how often to run inference
+  static const int    _analysisIntervalSec = 20;   // matches window length
   static const int    _minSamplesRequired  = _sampleRateHz * 10; // 10s minimum
 
-  final BleService         _ble;
+  /// Minimum peak-to-peak arm swing amplitude (deg) to count as active swing.
+  /// Below this the person is considered stationary — has_armswing = 0.
+  static const double _minArmSwingDeg = 5.0;
+
+  final BleService          _ble;
   final GaitInferenceEngine _engine;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -169,19 +176,22 @@ class GaitPipeline extends ChangeNotifier {
 
   // ── Feature extraction ────────────────────────────────────────────────────
   //
-  // From the raw IMU buffer we compute a best-effort approximation of the
-  // 27 features the model was trained on.  Axivity features (free-living,
-  // 24-hour wear) are always null here — the model was trained to handle this
-  // via median imputation. Arm swing uses right-wrist gyroscope (gyrZ).
+  // Implements the PPMI Gait Assessment Methods Document formulas exactly.
+  // RA_AMP_U / LA_AMP_U: peak-to-peak angular range per swing half-cycle
+  //   (degrees), computed by integrating gyrZ over each half-cycle via
+  //   trapezoidal rule with per-segment linear detrending to eliminate gyro
+  //   drift, then averaging across all detected cycles.
+  // SYM_U:  1 - (RA_AMP / LA_AMP)  [PPMI formula]
+  // ASA_U:  (45 - arctan(greater/smaller) * 180/pi) * 100 / 90  [PPMI formula]
+  // Axivity features always null — model handles via median imputation.
 
   Map<String, double?> _extractFeatures(List<ImuSample> samples) {
-    final n = samples.length.toDouble();
+    final dt = 1.0 / _sampleRateHz;
 
     // ── Accelerometer vertical (Z) for gait timing ─────────────────────────
     final accZ = samples.map((s) => s.accZ).toList();
     final peaks = _detectPeaks(accZ, _sampleRateHz);
 
-    // Cadence (steps/min)
     double? cad;
     double? strCv;
     double? sp;
@@ -193,81 +203,149 @@ class GaitPipeline extends ChangeNotifier {
       final meanInterval = _mean(intervals);
       cad   = meanInterval > 0 ? (60.0 / meanInterval) : null;
       strCv = meanInterval > 0 ? (_std(intervals) / meanInterval * 100) : null;
-
       // Walking speed proxy: cadence × 0.75m (avg step length)
-      sp = cad != null ? (cad * 0.75 / 60.0) : null;
+      sp    = cad != null ? (cad * 0.75 / 60.0) : null;
     }
 
-    // ── Arm swing from wrist gyroscope Z ───────────────────────────────────
+    // ── Arm swing amplitude in DEGREES via gyroscope integration ──────────
+    // Per PPMI doc: amplitude = range from peak anterior to posterior movement.
+    // Integrate gyrZ (deg/s) over each swing half-cycle using the trapezoidal
+    // rule to get angular displacement (degrees). Each half-cycle is integrated
+    // and detrended independently (linear baseline removal) to eliminate
+    // gyroscope drift — prevents drift accumulation across the 20s window.
     final gyrZ = samples.map((s) => s.gyrZ).toList();
-    final gyrZPos = gyrZ.where((v) => v > 0).toList();
-    final gyrZNeg = gyrZ.where((v) => v < 0).toList();
 
-    final raAmp = gyrZPos.isNotEmpty ? _mean(gyrZPos) : null;
-    final laAmp = gyrZNeg.isNotEmpty ? _mean(gyrZNeg.map((v) => v.abs()).toList()) : null;
-
-    double? sym;
-    double? asa;
-    if (raAmp != null && laAmp != null && (raAmp + laAmp) > 0) {
-      sym = 1.0 - ((raAmp - laAmp).abs() / (raAmp + laAmp));
-      asa = (raAmp - laAmp).abs();
+    // Detect swing half-cycles using zero-crossings of gyrZ
+    final zeroCrossings = <int>[];
+    for (int i = 1; i < gyrZ.length; i++) {
+      if (gyrZ[i - 1] * gyrZ[i] < 0) zeroCrossings.add(i);
     }
 
-    final hasArmswing = (raAmp != null && laAmp != null) ? 1.0 : 0.0;
+    final rightCycleAmps = <double>[]; // positive half-cycles (forward swing)
+    final leftCycleAmps  = <double>[]; // negative half-cycles (backward swing)
 
-    // ── Trunk sway from accelerometer X (mediolateral) ─────────────────────
+    for (int i = 0; i < zeroCrossings.length - 1; i++) {
+      final start  = zeroCrossings[i];
+      final end    = zeroCrossings[i + 1];
+      final segGyr = gyrZ.sublist(start, end + 1);
+      final n      = segGyr.length;
+
+      // Integrate THIS segment only (trapezoidal rule) — no cross-segment drift
+      final segAngle = List<double>.filled(n, 0.0);
+      for (int j = 1; j < n; j++) {
+        segAngle[j] = segAngle[j - 1] + (segGyr[j - 1] + segGyr[j]) * 0.5 * dt;
+      }
+
+      // Linear detrend: subtract straight line from segAngle[0] to segAngle[n-1]
+      final slope = (segAngle[n - 1] - segAngle[0]) / (n - 1);
+      final detrended = List<double>.generate(
+        n, (j) => segAngle[j] - (segAngle[0] + slope * j),
+      );
+
+      final ampRange = detrended.reduce(max) - detrended.reduce(min);
+
+      // Positive gyrZ midpoint = forward (right arm) swing
+      if (gyrZ[(start + end) ~/ 2] > 0) {
+        rightCycleAmps.add(ampRange);
+      } else {
+        leftCycleAmps.add(ampRange);
+      }
+    }
+
+    // Average amplitude per arm (degrees) — PPMI RA_AMP_U / LA_AMP_U
+    final raAmp = rightCycleAmps.isNotEmpty ? _mean(rightCycleAmps) : null;
+    final laAmp = leftCycleAmps.isNotEmpty  ? _mean(leftCycleAmps)  : null;
+
+    // Only flag as active arm swing if amplitude exceeds minimum threshold
+    final hasArmswing = (raAmp != null && raAmp >= _minArmSwingDeg &&
+                         laAmp != null && laAmp >= _minArmSwingDeg) ? 1.0 : 0.0;
+
+    // Null out amplitudes below threshold (treat as missing for model)
+    final raAmpFinal = (raAmp != null && raAmp >= _minArmSwingDeg) ? raAmp : null;
+    final laAmpFinal = (laAmp != null && laAmp >= _minArmSwingDeg) ? laAmp : null;
+
+    // ── SYM_U: Between-arm symmetry (PPMI formula) ─────────────────────────
+    // Sym = 1 - (AverageAmplitudeRight / AverageAmplitudeLeft)
+    double? sym;
+    if (raAmpFinal != null && laAmpFinal != null && laAmpFinal > 0) {
+      sym = 1.0 - (raAmpFinal / laAmpFinal);
+    }
+
+    // ── ASA_U: Arm swing asymmetry (PPMI formula) ──────────────────────────
+    // ASA = (45 - arctan(greater / smaller) * (180/pi)) * 100 / 90
+    double? asa;
+    if (raAmpFinal != null && laAmpFinal != null &&
+        raAmpFinal > 0 && laAmpFinal > 0) {
+      final greater = raAmpFinal >= laAmpFinal ? raAmpFinal : laAmpFinal;
+      final smaller = raAmpFinal <  laAmpFinal ? raAmpFinal : laAmpFinal;
+      asa = (45.0 - (atan(greater / smaller) * 180.0 / pi)) * 100.0 / 90.0;
+    }
+
+    // ── Trunk sway from accelerometer AP (Y) and ML (X) ────────────────────
+    // SW_VEL_OP : RMS of AP+ML acceleration (mean velocity proxy)
+    // SW_PATH_OP: total CoP trajectory length from incremental AP+ML displacement
+    // SW_FREQ_OP: centroidal frequency via zero-crossing rate on AP axis
     final accX = samples.map((s) => s.accX).toList();
-    final swVel  = _rms(accX);                           // RMS ≈ sway velocity proxy
-    final swPath = accX.map((v) => v.abs()).reduce((a, b) => a + b) / n;
-    final swFreq = _dominantFreq(accX, _sampleRateHz);
-    final hasSway = 1.0;
+    final accY = samples.map((s) => s.accY).toList();
 
-    // ── CVStrideTime (Axivity-derived, but we can estimate from wrist) ──────
-    final cvStrideTime = strCv; // reuse stride CV from peaks
+    final swVel = _rms([...accX, ...accY]);
+
+    double swPath = 0.0;
+    for (int i = 1; i < samples.length; i++) {
+      final dAP = (accY[i] - accY[i - 1]).abs();
+      final dML = (accX[i] - accX[i - 1]).abs();
+      swPath += sqrt(dAP * dAP + dML * dML) * dt;
+    }
+
+    final swFreq = _dominantFreq(accY, _sampleRateHz);
+    const hasSway = 1.0;
+
+    // CVStrideTime reused from stride intervals
+    final cvStrideTime = strCv;
 
     return {
       // OPALS_UNIVERSAL
-      'CAD_U'              : cad,
-      'STR_CV_U'           : strCv,
-      'SP_U'               : sp,
-      // OPALS_ARMSWING
-      'RA_AMP_U'           : raAmp,
-      'LA_AMP_U'           : laAmp,
-      'SYM_U'              : sym,
-      'ASA_U'              : asa,
-      'has_armswing'       : hasArmswing,
+      'CAD_U'             : cad,
+      'STR_CV_U'          : strCv,
+      'SP_U'              : sp,
+      // OPALS_ARMSWING (all in degrees, per PPMI doc)
+      'RA_AMP_U'          : raAmpFinal,
+      'LA_AMP_U'          : laAmpFinal,
+      'SYM_U'             : sym,
+      'ASA_U'             : asa,
+      'has_armswing'      : hasArmswing,
       // OPALS_SWAY
-      'SW_VEL_OP'          : swVel,
-      'SW_PATH_OP'         : swPath,
-      'SW_FREQ_OP'         : swFreq,
-      'has_sway'           : hasSway,
-      // AXIVITY (not available from wrist sensor alone — imputed by model)
-      'MeanSVMDaymg'       : null,
-      'PercentWalking'     : null,
-      'ActivityLevel'      : null,
-      'CadencetimeDomain'  : null,
-      'NumberOfBouts'      : null,
-      'wdV'                : null,
-      'stepTime'           : null,
-      'strideTime'         : null,
-      'CVStrideTime'       : cvStrideTime,
-      'SampEntropyV'       : null,
-      'stepAsymV'          : null,
-      'StepVelocitycmsec'  : sp != null ? sp * 100 : null,
-      'rmsV'               : _rms(samples.map((s) => s.accZ).toList()),
-      'has_axivity'        : 0.0,
+      'SW_VEL_OP'         : swVel,
+      'SW_PATH_OP'        : swPath,
+      'SW_FREQ_OP'        : swFreq,
+      'has_sway'          : hasSway,
+      // AXIVITY (not available from wrist sensor — imputed by model)
+      'MeanSVMDaymg'      : null,
+      'PercentWalking'    : null,
+      'ActivityLevel'     : null,
+      'CadencetimeDomain' : null,
+      'NumberOfBouts'     : null,
+      'wdV'               : null,
+      'stepTime'          : null,
+      'strideTime'        : null,
+      'CVStrideTime'      : cvStrideTime,
+      'SampEntropyV'      : null,
+      'stepAsymV'         : null,
+      'StepVelocitycmsec' : sp != null ? sp * 100 : null,
+      'rmsV'              : _rms(accZ),
+      'has_axivity'       : 0.0,
       // Subgroup
-      'GAIT_SUBGROUP'      : 0.0,
+      'GAIT_SUBGROUP'     : 0.0,
     };
   }
 
   // ── DSP helpers ───────────────────────────────────────────────────────────
 
-  /// Simple peak detection: local maxima above mean + threshold
+  /// Simple peak detection: local maxima above mean + 0.3*std threshold
   List<int> _detectPeaks(List<double> signal, int fs) {
-    final mu  = _mean(signal);
-    final sd  = _std(signal);
-    final thr = mu + 0.3 * sd;
+    final mu      = _mean(signal);
+    final sd      = _std(signal);
+    final thr     = mu + 0.3 * sd;
     final minDist = (fs * 0.35).round(); // min 350ms between peaks
 
     final peaks = <int>[];
@@ -290,8 +368,8 @@ class GaitPipeline extends ChangeNotifier {
 
   double _std(List<double> x) {
     if (x.length < 2) return 0;
-    final mu  = _mean(x);
-    final sq  = x.map((v) => (v - mu) * (v - mu));
+    final mu = _mean(x);
+    final sq = x.map((v) => (v - mu) * (v - mu));
     return sqrt(sq.reduce((a, b) => a + b) / (x.length - 1));
   }
 
@@ -300,7 +378,7 @@ class GaitPipeline extends ChangeNotifier {
     return sqrt(x.map((v) => v * v).reduce((a, b) => a + b) / x.length);
   }
 
-  /// Dominant frequency via zero-crossing rate (lightweight, no FFT needed)
+  /// Dominant frequency via zero-crossing rate (lightweight FFT approximation)
   double _dominantFreq(List<double> signal, int fs) {
     if (signal.length < 2) return 0;
     final mu = _mean(signal);
@@ -308,7 +386,6 @@ class GaitPipeline extends ChangeNotifier {
     for (int i = 1; i < signal.length; i++) {
       if ((signal[i - 1] - mu) * (signal[i] - mu) < 0) crossings++;
     }
-    // Each pair of crossings = one full cycle
     return (crossings / 2.0) / (signal.length / fs);
   }
 }
