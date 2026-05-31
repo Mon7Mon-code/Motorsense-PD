@@ -1,0 +1,275 @@
+{
+  "feature_count": 27,
+  "feature_cols": [
+    "CAD_U",
+    "STR_CV_U",
+    "SP_U",
+    "RA_AMP_U",
+    "LA_AMP_U",
+    "SYM_U",
+    "ASA_U",
+    "has_armswing",
+    "SW_VEL_OP",
+    "SW_PATH_OP",
+    "SW_FREQ_OP",
+    "has_sway",
+    "MeanSVMDaymg",
+    "PercentWalking",
+    "ActivityLevel",
+    "CadencetimeDomain",
+    "NumberOfBouts",
+    "wdV",
+    "stepTime",
+    "strideTime",
+    "CVStrideTime",
+    "SampEntropyV",
+    "stepAsymV",
+    "StepVelocitycmsec",
+    "rmsV",
+    "has_axivity",
+    "GAIT_SUBGROUP"
+  ],
+  "features": [
+    {
+      "name": "CAD_U",
+      "index": 0,
+      "imputer_median": 112.51301574707031,
+      "scaler_mean": 109.92628542043396,
+      "scaler_std": 13.890322560674788,
+      "group": "opals_universal"
+    },
+    {
+      "name": "STR_CV_U",
+      "index": 1,
+      "imputer_median": 2.686716318130493,
+      "scaler_mean": 5.673071391249107,
+      "scaler_std": 5.888463420099126,
+      "group": "opals_universal"
+    },
+    {
+      "name": "SP_U",
+      "index": 2,
+      "imputer_median": 1.1929141283035278,
+      "scaler_mean": 1.2116010029942303,
+      "scaler_std": 0.19764860669155457,
+      "group": "opals_universal"
+    },
+    {
+      "name": "RA_AMP_U",
+      "index": 3,
+      "imputer_median": 28.296289443969727,
+      "scaler_mean": 29.854670283147843,
+      "scaler_std": 14.689663456251775,
+      "group": "opals_armswing"
+    },
+    {
+      "name": "LA_AMP_U",
+      "index": 4,
+      "imputer_median": 30.91142463684082,
+      "scaler_mean": 31.557142914351772,
+      "scaler_std": 15.130247129541504,
+      "group": "opals_armswing"
+    },
+    {
+      "name": "SYM_U",
+      "index": 5,
+      "imputer_median": 0.34786438941955566,
+      "scaler_mean": 0.6088765223305357,
+      "scaler_std": 1.1550210456300691,
+      "group": "opals_armswing"
+    },
+    {
+      "name": "ASA_U",
+      "index": 6,
+      "imputer_median": 11.474592208862305,
+      "scaler_mean": 14.063775185306193,
+      "scaler_std": 9.689197488235736,
+      "group": "opals_armswing"
+    },
+    {
+      "name": "has_armswing",
+      "index": 7,
+      "imputer_median": 1.0,
+      "scaler_mean": 0.9110169491525424,
+      "scaler_std": 0.28471927842936173,
+      "group": "flag"
+    },
+    {
+      "name": "SW_VEL_OP",
+      "index": 8,
+      "imputer_median": 0.0022528856061398983,
+      "scaler_mean": 0.02682901434580622,
+      "scaler_std": 0.14274059620040588,
+      "group": "opals_sway"
+    },
+    {
+      "name": "SW_PATH_OP",
+      "index": 9,
+      "imputer_median": 3.645659923553467,
+      "scaler_mean": 3.9487053655971915,
+      "scaler_std": 1.5058769097362168,
+      "group": "opals_sway"
+    },
+    {
+      "name": "SW_FREQ_OP",
+      "index": 10,
+      "imputer_median": 0.6640551090240479,
+      "scaler_mean": 0.6905683793906434,
+      "scaler_std": 0.2323898919526588,
+      "group": "opals_sway"
+    },
+    {
+      "name": "has_sway",
+      "index": 11,
+      "imputer_median": 1.0,
+      "scaler_mean": 0.576271186440678,
+      "scaler_std": 0.4941484656648559,
+      "group": "flag"
+    },
+    {
+      "name": "MeanSVMDaymg",
+      "index": 12,
+      "imputer_median": 44.113101959228516,
+      "scaler_mean": 44.0470824322458,
+      "scaler_std": 8.456424749102526,
+      "group": "axivity"
+    },
+    {
+      "name": "PercentWalking",
+      "index": 13,
+      "imputer_median": 7.578054428100586,
+      "scaler_mean": 7.524260919983104,
+      "scaler_std": 1.7251246150741162,
+      "group": "axivity"
+    },
+    {
+      "name": "ActivityLevel",
+      "index": 14,
+      "imputer_median": 1.034027099609375,
+      "scaler_mean": 1.0326299028376402,
+      "scaler_std": 0.026681363804552313,
+      "group": "axivity"
+    },
+    {
+      "name": "CadencetimeDomain",
+      "index": 15,
+      "imputer_median": 106.61947631835938,
+      "scaler_mean": 106.5434867729575,
+      "scaler_std": 5.2134730437663075,
+      "group": "axivity"
+    },
+    {
+      "name": "NumberOfBouts",
+      "index": 16,
+      "imputer_median": 160.5,
+      "scaler_mean": 188.3177966101695,
+      "scaler_std": 136.24038086483728,
+      "group": "axivity"
+    },
+    {
+      "name": "wdV",
+      "index": 17,
+      "imputer_median": 0.69580078125,
+      "scaler_mean": 0.6969387248411016,
+      "scaler_std": 0.012385448822708844,
+      "group": "axivity"
+    },
+    {
+      "name": "stepTime",
+      "index": 18,
+      "imputer_median": 0.5707363486289978,
+      "scaler_mean": 0.5719978962156732,
+      "scaler_std": 0.028734345870536745,
+      "group": "axivity"
+    },
+    {
+      "name": "strideTime",
+      "index": 19,
+      "imputer_median": 1.1416852474212646,
+      "scaler_mean": 1.1439989658735565,
+      "scaler_std": 0.05740425203106827,
+      "group": "axivity"
+    },
+    {
+      "name": "CVStrideTime",
+      "index": 20,
+      "imputer_median": 5.8236308097839355,
+      "scaler_mean": 5.910278230400409,
+      "scaler_std": 1.6956608754828713,
+      "group": "axivity"
+    },
+    {
+      "name": "SampEntropyV",
+      "index": 21,
+      "imputer_median": 0.6948738098144531,
+      "scaler_mean": 0.701011989833945,
+      "scaler_std": 0.06250828516124239,
+      "group": "axivity"
+    },
+    {
+      "name": "stepAsymV",
+      "index": 22,
+      "imputer_median": 0.8877596855163574,
+      "scaler_mean": 0.8806415793754286,
+      "scaler_std": 0.04535873709963888,
+      "group": "axivity"
+    },
+    {
+      "name": "StepVelocitycmsec",
+      "index": 23,
+      "imputer_median": 106.52884674072266,
+      "scaler_mean": 107.52219633328713,
+      "scaler_std": 11.164498489198047,
+      "group": "axivity"
+    },
+    {
+      "name": "rmsV",
+      "index": 24,
+      "imputer_median": 1.0013103485107422,
+      "scaler_mean": 0.9986335023985071,
+      "scaler_std": 0.03560271733103616,
+      "group": "axivity"
+    },
+    {
+      "name": "has_axivity",
+      "index": 25,
+      "imputer_median": 0.0,
+      "scaler_mean": 0.3983050847457627,
+      "scaler_std": 0.4895489191198704,
+      "group": "flag"
+    },
+    {
+      "name": "GAIT_SUBGROUP",
+      "index": 26,
+      "imputer_median": 0.5,
+      "scaler_mean": 0.8813559322033898,
+      "scaler_std": 1.117423576618756,
+      "group": "flag"
+    }
+  ],
+  "preprocessing_notes": {
+    "step1_impute": "Replace NaN with imputer_median for each feature",
+    "step2_scale": "(value - scaler_mean) / scaler_std",
+    "missing_flags": "has_armswing=0 if RA_AMP_U missing; has_sway=0 if SW_VEL_OP missing; has_axivity=0 if no Axivity data",
+    "arm_swing_note": "RA_AMP_U/LA_AMP_U/SYM_U/ASA_U are arm amplitude in degrees from wrist Opals sensor during walking.",
+    "sway_note": "SW_VEL_OP/PATH/FREQ are sway velocity/path/frequency from lower-back Opals during standing balance test."
+  },
+  "severity_thresholds": {
+    "CVStrideTime": {
+      "p33": 4.964319516570001,
+      "p66": 6.10263267208,
+      "p90": 8.668698501399998
+    },
+    "RA_AMP_U": {
+      "p10": 7.7438863031,
+      "p33": 15.0782500505,
+      "p66": 26.090134921199997
+    }
+  },
+  "severity_notes": {
+    "applies_to": "impaired predictions only (binary classifier output = 1)",
+    "CVStrideTime": "Primary driver. Raw (unscaled) value. Higher = worse.",
+    "RA_AMP_U": "Secondary modifier. Raw (unscaled) value in degrees. Lower = worse. If below p10, upgrade severity by 1.",
+    "band_logic": "stride_cv < p33 \u2192 base 1; < p66 \u2192 base 2; < p90 \u2192 base 3; else \u2192 base 4. If ra_amp < ra_p10 \u2192 min(base+1, 4)."
+  }
+}
