@@ -131,6 +131,14 @@ class TremorPipeline extends ChangeNotifier {
   // Empirical starting points — tune with real patient data.
   static const List<double> _thresholds = [0.05, 0.15, 0.30, 0.50];
 
+  // Multi-feature dyskinesia classifier thresholds.
+  static const double _kBandRatioGate            = 0.05;  // Stage 1 gate
+  static const double _kAutocorrThreshold        = 0.70;  // Stage 1 gate: ≥ this = periodic = tremor
+  static const double _kSpectralEntropyThreshold = 0.60;  // high = broadband = dyskinesia
+  static const double _kRmsAmplitudeThreshold    = 0.10;  // m/s², gravity removed
+  static const double _kJerkThreshold            = 0.30;  // °/s per sample
+  static const int    _kPersistenceTicks         = 3;     // ~6 s at 2-s cadence
+
   // ── Dependencies ───────────────────────────────────────────────────────────
   final BleService _ble;
 
@@ -152,6 +160,9 @@ class TremorPipeline extends ChangeNotifier {
   String _csvTremorLabel    = 'Normal';
   double _csvTremorHz       = 0.0;
   double _csvTremorAmp      = 0.0;
+
+  // Persistence counter for dyskinesia classifier (resets on any gate/stage failure).
+  int _consecutiveDyskinTicks = 0;
 
   // Auto-detected episodes (newest first) — read by SymptomsScreen.
   final List<DetectedEpisode> _episodes = [];
@@ -272,17 +283,61 @@ class TremorPipeline extends ChangeNotifier {
         sqrt(s.gyrX * s.gyrX + s.gyrY * s.gyrY + s.gyrZ * s.gyrZ)).toList();
     final accMag = snapshot.map((s) =>
         sqrt(s.accX * s.accX + s.accY * s.accY + s.accZ * s.accZ)).toList();
-    final fused = List<double>.generate(
-      snapshot.length,
-      (i) => 0.7 * gyroMag[i] + 0.3 * accMag[i],
-    );
 
-    final total = totalPower(fused, _sampleRateHz);
+    // Remove gravity DC offset (~9.81 m/s²) so band power, entropy, and
+    // autocorrelation are not dominated by the static acceleration component.
+    final accMu        = signalMean(accMag);
+    final accDetrended = accMag.map((v) => v - accMu).toList();
+
+    // Feature 1: band power ratio (1–3 Hz, gravity-free accel).
+    final total = totalPower(accDetrended, _sampleRateHz);
     if (total < 1e-6) return;
+    final ratio = bandPower(accDetrended, _sampleRateHz, _dyskinLowHz, _dyskinHighHz) / total;
 
-    final dyskinSev = _toSeverity(
-      bandPower(fused, _sampleRateHz, _dyskinLowHz, _dyskinHighHz) / total,
+    // Feature 2: spectral entropy (gravity-free accel; high = broadband = dyskinesia-like).
+    final spectralEnt = _spectralEntropy(accDetrended, _sampleRateHz);
+
+    // Feature 3: RMS amplitude (gravity-free accel).
+    final rmsAmplitude = signalRms(accDetrended);
+
+    // Feature 4: jerk — RMS of frame-to-frame gyro magnitude differences.
+    final jerkDiffs = List<double>.generate(
+        gyroMag.length - 1, (i) => gyroMag[i + 1] - gyroMag[i]);
+    final jerk = signalRms(jerkDiffs);
+
+    // Feature 5: lag-1 autocorrelation (gravity-free accel; ≈1 = periodic = tremor).
+    final autocorr = _lag1Autocorr(accDetrended);
+
+    // Stage 1 gate: filter out rest and tremor.
+    final gatePass = ratio > _kBandRatioGate && autocorr < _kAutocorrThreshold;
+    bool classifierFired = false;
+    if (!gatePass) {
+      _consecutiveDyskinTicks = 0;
+    } else {
+      // Stage 2: all remaining features must clear thresholds simultaneously.
+      classifierFired =
+          spectralEnt  > _kSpectralEntropyThreshold &&
+          rmsAmplitude > _kRmsAmplitudeThreshold    &&
+          jerk         > _kJerkThreshold;
+
+      _consecutiveDyskinTicks = classifierFired ? _consecutiveDyskinTicks + 1 : 0;
+    }
+
+    debugPrint(
+      '[Dysk] ratio=${ratio.toStringAsFixed(3)} '
+      'autocorr=${autocorr.toStringAsFixed(3)} '
+      'entropy=${spectralEnt.toStringAsFixed(3)} '
+      'rms=${rmsAmplitude.toStringAsFixed(3)} '
+      'jerk=${jerk.toStringAsFixed(3)} '
+      'gate=${gatePass ? "PASS" : "FAIL"} '
+      'clf=${classifierFired ? "PASS" : "FAIL"} '
+      'ticks=$_consecutiveDyskinTicks',
     );
+
+    // Persistence rule: require 3 consecutive positive ticks to suppress transients.
+    final dyskinSev = _consecutiveDyskinTicks >= _kPersistenceTicks
+        ? _toSeverity(ratio)
+        : 0;
 
     final now = DateTime.now();
     final result = TremorResult(
@@ -362,5 +417,48 @@ class TremorPipeline extends ChangeNotifier {
       case 'NONE':
       default:         return 0;
     }
+  }
+
+  /// Lag-1 autocorrelation of [signal].
+  /// Returns ≈1 for periodic signals (tremor), ≈0 for irregular ones (dyskinesia).
+  double _lag1Autocorr(List<double> signal) {
+    final n = signal.length;
+    if (n < 2) return 0;
+    final mu = signalMean(signal);
+    double num = 0, den = 0;
+    for (int i = 0; i < n - 1; i++) {
+      num += (signal[i] - mu) * (signal[i + 1] - mu);
+    }
+    for (int i = 0; i < n; i++) {
+      den += (signal[i] - mu) * (signal[i] - mu);
+    }
+    return den < 1e-10 ? 0 : num / den;
+  }
+
+  /// Normalised spectral entropy of [signal] from 1 Hz to Nyquist.
+  /// Returns 0–1: high = broadband (dyskinesia-like), low = narrow peak (tremor-like).
+  double _spectralEntropy(List<double> signal, int fs) {
+    final n = signal.length;
+    final resolution = fs / n;
+    final firstBin = (1.0 / resolution).round().clamp(1, n ~/ 2);
+    final lastBin  = n ~/ 2;
+
+    double totalPow = 0;
+    final powers = <double>[];
+    for (int bin = firstBin; bin <= lastBin; bin++) {
+      final p = goertzelPower(signal, fs, bin * resolution);
+      powers.add(p);
+      totalPow += p;
+    }
+    if (totalPow < 1e-10 || powers.isEmpty) return 0;
+
+    double entropy = 0;
+    for (final p in powers) {
+      if (p > 0) {
+        final prob = p / totalPow;
+        entropy -= prob * log(prob);
+      }
+    }
+    return entropy / log(powers.length);
   }
 }
