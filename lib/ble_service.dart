@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 /// Raw IMU sample from the XIAO BLE sensor
 class ImuSample {
@@ -50,7 +51,7 @@ enum BleStatus { disconnected, scanning, connecting, connected, simulating }
 ///
 /// SIMULATOR MODE: set simulatorMode = true (default until hardware arrives).
 /// REAL BLE: set simulatorMode = false — then plug in XIAO BLE Sense and
-/// update _targetDeviceName and _imuCharUuid to match your firmware.
+/// update _imuCharUuid to match your firmware.
 class BleService extends ChangeNotifier {
   // ── Configuration ─────────────────────────────────────────────────────────
   static const bool simulatorMode = true; // ← flip to false when XIAO arrives
@@ -58,7 +59,7 @@ class BleService extends ChangeNotifier {
   /// XIAO BLE device name as advertised (update to match firmware)
   static const String _targetDeviceName = 'XIAO_PD_Monitor';
 
-  /// IMU notification characteristic UUID (update to match firmware)
+  /// IMU notification characteristic UUID — update once firmware confirms
   static const String _imuCharUuid = '12345678-1234-1234-1234-123456789abc';
 
   // ── Simulator parameters (mimics a moderately-impaired gait pattern) ──────
@@ -86,6 +87,11 @@ class BleService extends ChangeNotifier {
   double  _simT = 0.0;
   final   _rng  = Random();
 
+  // Real BLE subscriptions
+  StreamSubscription<List<ScanResult>>? _scanSub;
+  StreamSubscription<List<int>>?        _charSub;
+  BluetoothDevice?                      _bleDevice;
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   /// Start streaming IMU data (simulator or real BLE)
@@ -102,7 +108,12 @@ class BleService extends ChangeNotifier {
   void stop() {
     _simTimer?.cancel();
     _simTimer = null;
-    // TODO (real BLE): disconnect flutter_blue_plus device here
+    _scanSub?.cancel();
+    _scanSub = null;
+    _charSub?.cancel();
+    _charSub = null;
+    _bleDevice?.disconnect();
+    _bleDevice = null;
     _setStatus(BleStatus.disconnected);
     _connectedDevice = null;
   }
@@ -154,51 +165,63 @@ class BleService extends ChangeNotifier {
 
   double _noise() => (_rng.nextDouble() - 0.5) * 2 * _simNoise;
 
-  // ── Real BLE (stub — implement when XIAO arrives) ─────────────────────────
+  // ── Real BLE ──────────────────────────────────────────────────────────────
 
   Future<void> _startBle() async {
     _setStatus(BleStatus.scanning);
 
-    // ── TODO: replace this stub with flutter_blue_plus implementation ──────
-    //
-    // 1. Add to pubspec.yaml:
-    //      flutter_blue_plus: ^1.32.12
-    //
-    // 2. Replace this block with:
-    //
-    //    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
-    //    FlutterBluePlus.scanResults.listen((results) async {
-    //      for (final r in results) {
-    //        if (r.device.platformName == _targetDeviceName) {
-    //          await FlutterBluePlus.stopScan();
-    //          await r.device.connect();
-    //          _connectedDevice = r.device.platformName;
-    //          _setStatus(BleStatus.connected);
-    //
-    //          final services = await r.device.discoverServices();
-    //          for (final s in services) {
-    //            for (final c in s.characteristics) {
-    //              if (c.uuid.toString() == _imuCharUuid) {
-    //                await c.setNotifyValue(true);
-    //                c.onValueReceived.listen((bytes) {
-    //                  try {
-    //                    _sampleController.add(ImuSample.fromBytes(bytes));
-    //                  } catch (e) {
-    //                    debugPrint('BLE parse error: $e');
-    //                  }
-    //                });
-    //              }
-    //            }
-    //          }
-    //        }
-    //      }
-    //    });
-    //
-    // ── End TODO ─────────────────────────────────────────────────────────────
+    try {
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
 
-    _lastError = 'Real BLE not implemented yet — use simulatorMode = true';
-    _setStatus(BleStatus.disconnected);
-    notifyListeners();
+      _scanSub = FlutterBluePlus.scanResults.listen((results) async {
+        for (final r in results) {
+          if (r.device.platformName == _targetDeviceName) {
+            await FlutterBluePlus.stopScan();
+            await _scanSub?.cancel();
+            _scanSub = null;
+
+            _setStatus(BleStatus.connecting);
+            _bleDevice = r.device;
+
+            try {
+              await r.device.connect(timeout: const Duration(seconds: 10));
+              _connectedDevice = r.device.platformName;
+              _setStatus(BleStatus.connected);
+
+              final services = await r.device.discoverServices();
+              for (final s in services) {
+                for (final c in s.characteristics) {
+                  if (c.uuid.toString().toLowerCase() ==
+                      _imuCharUuid.toLowerCase()) {
+                    await c.setNotifyValue(true);
+                    _charSub = c.onValueReceived.listen((bytes) {
+                      try {
+                        _sampleController.add(ImuSample.fromBytes(bytes));
+                      } catch (e) {
+                        debugPrint('[BleService] parse error: $e');
+                      }
+                    });
+                    return; // found characteristic — done
+                  }
+                }
+              }
+              _lastError = 'IMU characteristic $_imuCharUuid not found';
+              debugPrint('[BleService] $_lastError');
+              notifyListeners();
+            } catch (e) {
+              _lastError = 'Connection failed: $e';
+              _setStatus(BleStatus.disconnected);
+              notifyListeners();
+            }
+            return;
+          }
+        }
+      });
+    } catch (e) {
+      _lastError = 'Scan failed: $e';
+      _setStatus(BleStatus.disconnected);
+      notifyListeners();
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

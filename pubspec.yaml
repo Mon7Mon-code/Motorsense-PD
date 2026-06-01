@@ -34,6 +34,7 @@ dependencies:
 
   fl_chart: ^0.66.2
   provider: ^6.1.2
+  flutter_blue_plus: ^1.32.12
   
 
 
