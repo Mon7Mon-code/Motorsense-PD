@@ -108,25 +108,22 @@ class DetectedEpisode {
   });
 }
 
-/// Tremor + dyskinesia detector using Goertzel band-power analysis.
+/// Tremor + dyskinesia pipeline — two separate input paths, one output.
 ///
-/// Pipeline (runs every [_analysisIntervalSec] seconds on a rolling window):
-///   1. Compute fused gyro magnitude (primary) + accel magnitude (secondary).
-///   2. Apply Goertzel band-power at:
-///        Tremor band    : 3.5 – 7.5 Hz  (rest/action tremor)
-///        Dyskinesia band: 1.0 – 3.0 Hz  (involuntary low-freq movement)
-///   3. Map band-power ratio to severity 0–4.
-///   4. Debounce-log episodes for the Symptoms screen.
+/// Tremor    → firmware classifies and sends a CSV row → call [ingestReading].
+/// Dyskinesia → app computes from raw IMU via Goertzel (1–3 Hz) every 2 s.
+///
+/// Both paths write to the same [TremorResult] output stream so callers and
+/// UI are unaware of which path produced each field.
 class TremorPipeline extends ChangeNotifier {
   // ── Configuration ──────────────────────────────────────────────────────────
-  static const int    _sampleRateHz       = 50;
-  static const int    _windowSamples      = 200;  // 4 s @ 50 Hz
-  static const int    _analysisIntervalSec = 2;   // 50% overlap with window
-  static const int    _minSamples         = 100;  // 2 s minimum before first analysis
-  static const int    _episodeCooldownSec = 30;   // min gap between logged episodes
+  static const int    _sampleRateHz        = 50;
+  static const int    _windowSamples       = 200;  // 4 s @ 50 Hz
+  static const int    _analysisIntervalSec = 2;    // dyskinesia analysis cadence
+  static const int    _minSamples          = 100;  // 2 s minimum before first analysis
+  static const int    _episodeCooldownSec  = 30;   // min gap between logged episodes
 
-  static const double _tremorLowHz  = 3.5;
-  static const double _tremorHighHz = 7.5;
+  // Dyskinesia band only — tremor band is handled by firmware.
   static const double _dyskinLowHz  = 1.0;
   static const double _dyskinHighHz = 3.0;
 
@@ -146,6 +143,15 @@ class TremorPipeline extends ChangeNotifier {
   String?       _lastError;
   DateTime?     _lastTremorEpisodeAt;
   DateTime?     _lastDyskinEpisodeAt;
+
+  // Last tremor values received from firmware CSV.
+  // Carried forward into every dyskinesia timer result so the UI
+  // always shows the most recent tremor classification alongside
+  // the freshly computed dyskinesia value.
+  int    _csvTremorSeverity = 0;
+  String _csvTremorLabel    = 'Normal';
+  double _csvTremorHz       = 0.0;
+  double _csvTremorAmp      = 0.0;
 
   // Auto-detected episodes (newest first) — read by SymptomsScreen.
   final List<DetectedEpisode> _episodes = [];
@@ -202,7 +208,14 @@ class TremorPipeline extends ChangeNotifier {
   /// column), so the UI never regresses to zero unexpectedly.
   void ingestReading(TremorReading reading) {
     final tremorSev = _severityFromString(reading.severity);
-    // Preserve last known dyskinesia severity — CSV format doesn't include it.
+
+    // Save so _analyse() carries these forward into every dyskinesia tick.
+    _csvTremorSeverity = tremorSev;
+    _csvTremorLabel    = _kSeverityLabels[tremorSev];
+    _csvTremorHz       = reading.domFreq.toDouble();
+    _csvTremorAmp      = reading.axRms;
+
+    // Dyskinesia: use latest value from the IMU timer path.
     final dyskinSev = _latest?.dyskinesiaSeverity ?? 0;
 
     final now = DateTime.now();
@@ -225,7 +238,6 @@ class TremorPipeline extends ChangeNotifier {
     _tremorTrend.removeWhere((e) => e.$1.isBefore(cutoff));
 
     _maybeLogEpisode(result, now);
-
     debugPrint('[TremorPipeline] ingested $reading → $result');
     notifyListeners();
   }
@@ -246,53 +258,40 @@ class TremorPipeline extends ChangeNotifier {
     }
   }
 
-  // ── Analysis ────────────────────────────────────────────────────────────────
+  // ── Analysis (dyskinesia only) ──────────────────────────────────────────────
+  // Tremor is NOT computed here — it comes from the firmware CSV via
+  // ingestReading(). This method only updates dyskinesia from raw IMU and
+  // carries forward the last known CSV tremor values.
 
   void _analyse() {
     if (_buffer.length < _minSamples) return;
 
     final snapshot = List<ImuSample>.from(_buffer);
 
-    // Fused gyro magnitude — rotation is the primary tremor carrier at the wrist.
-    final gyroMag = snapshot.map((s) {
-      return sqrt(s.gyrX * s.gyrX + s.gyrY * s.gyrY + s.gyrZ * s.gyrZ);
-    }).toList();
-
-    // Fused accel magnitude — adds linear displacement component.
-    final accMag = snapshot.map((s) {
-      return sqrt(s.accX * s.accX + s.accY * s.accY + s.accZ * s.accZ);
-    }).toList();
-
-    // Weighted fused signal (gyro dominant, accel supplementary).
+    final gyroMag = snapshot.map((s) =>
+        sqrt(s.gyrX * s.gyrX + s.gyrY * s.gyrY + s.gyrZ * s.gyrZ)).toList();
+    final accMag = snapshot.map((s) =>
+        sqrt(s.accX * s.accX + s.accY * s.accY + s.accZ * s.accZ)).toList();
     final fused = List<double>.generate(
       snapshot.length,
       (i) => 0.7 * gyroMag[i] + 0.3 * accMag[i],
     );
 
     final total = totalPower(fused, _sampleRateHz);
-    if (total < 1e-6) return; // silent signal — no meaningful analysis
+    if (total < 1e-6) return;
 
-    final tremorPow  = bandPower(fused, _sampleRateHz, _tremorLowHz, _tremorHighHz);
-    final dyskinPow  = bandPower(fused, _sampleRateHz, _dyskinLowHz, _dyskinHighHz);
-
-    final tremorRatio = tremorPow  / total;
-    final dyskinRatio = dyskinPow  / total;
-
-    final tremorSev = _toSeverity(tremorRatio);
-    final dyskinSev = _toSeverity(dyskinRatio);
-
-    final tremorHz  = dominantFreqInBand(
-      fused, _sampleRateHz, _tremorLowHz, _tremorHighHz,
+    final dyskinSev = _toSeverity(
+      bandPower(fused, _sampleRateHz, _dyskinLowHz, _dyskinHighHz) / total,
     );
-    // Amplitude: RMS gyro magnitude weighted by tremor band contribution.
-    final tremorAmp = signalRms(gyroMag) * tremorRatio;
 
     final now = DateTime.now();
     final result = TremorResult(
-      tremorSeverity:     tremorSev,
-      tremorLabel:        _kSeverityLabels[tremorSev],
-      tremorFrequencyHz:  tremorHz,
-      tremorAmplitude:    tremorAmp,
+      // Tremor: carry forward last CSV values (firmware owns this).
+      tremorSeverity:     _csvTremorSeverity,
+      tremorLabel:        _csvTremorLabel,
+      tremorFrequencyHz:  _csvTremorHz,
+      tremorAmplitude:    _csvTremorAmp,
+      // Dyskinesia: freshly computed from raw IMU.
       dyskinesiaSeverity: dyskinSev,
       dyskinesiaLabel:    _kSeverityLabels[dyskinSev],
       timestamp:          now,
@@ -302,14 +301,12 @@ class TremorPipeline extends ChangeNotifier {
     _resultController.add(result);
     _lastError = null;
 
-    // 7-day rolling trend (keep only last 7 days).
-    _tremorTrend.add((now, tremorSev));
+    _tremorTrend.add((now, _csvTremorSeverity));
     final cutoff = now.subtract(const Duration(days: 7));
     _tremorTrend.removeWhere((e) => e.$1.isBefore(cutoff));
 
     _maybeLogEpisode(result, now);
-
-    debugPrint('[TremorPipeline] $result');
+    debugPrint('[TremorPipeline] (dyskinesia tick) $result');
     notifyListeners();
   }
 
