@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'ble_service.dart';
 import 'gait_dsp.dart';
 import 'gait_inference.dart';
+import 'bradykinesia_gait.dart';
 import 'gait_validation.dart';
 import 'phone_sensor_service.dart';
 import 'sensor_config.dart';
@@ -18,6 +19,7 @@ class GaitAnalysisResult {
   final int samplesUsed;
   final GaitValidationMetrics validation;
   final Map<String, double?> features;
+  final BradykinesiaGaitResult bradykinesia;
 
   GaitAnalysisResult({
     required this.probability,
@@ -28,13 +30,15 @@ class GaitAnalysisResult {
     required this.samplesUsed,
     required this.validation,
     required this.features,
+    required this.bradykinesia,
   });
 
   @override
   String toString() =>
       'GaitAnalysisResult(prob=${probability.toStringAsFixed(3)}, '
-      'severity=$severityLevel/$severityLabel, samples=$samplesUsed, '
-      'steps=${validation.stepCount})';
+      'severity=$severityLevel/$severityLabel, '
+      'bradykinesia=${bradykinesia.level}/${bradykinesia.label}, '
+      'samples=$samplesUsed, steps=${validation.stepCount})';
 }
 
 /// Dual-sensor gait pipeline: wrist BLE (XIAO) + phone accelerometer.
@@ -53,6 +57,7 @@ class GaitPipeline extends ChangeNotifier {
   final BleService _ble;
   final PhoneSensorService _phone;
   final GaitInferenceEngine _engine;
+  final BradykinesiaGaitScorer _bradykinesiaScorer;
 
   final List<ImuSample> _wristBuffer = [];
   final List<PhoneAccelSample> _phoneBuffer = [];
@@ -79,13 +84,18 @@ class GaitPipeline extends ChangeNotifier {
     required BleService ble,
     required PhoneSensorService phone,
     required GaitInferenceEngine engine,
+    BradykinesiaGaitScorer? bradykinesiaScorer,
   })  : _ble = ble,
         _phone = phone,
-        _engine = engine;
+        _engine = engine,
+        _bradykinesiaScorer = bradykinesiaScorer ?? BradykinesiaGaitScorer();
 
   Future<void> init() async {
     try {
-      await _engine.init();
+      await Future.wait([
+        _engine.init(),
+        _bradykinesiaScorer.init(),
+      ]);
       _engineReady = true;
       debugPrint('[GaitPipeline] Engine initialised');
     } catch (e) {
@@ -205,6 +215,12 @@ class GaitPipeline extends ChangeNotifier {
 
       final gaitResult = await _engine.predict(features);
 
+      final bradyInputs = BradykinesiaGaitInputs.fromGaitFeatures(
+        features,
+        armSwingVelocityRmsDegS: validation.armSwingVelocityRmsDegS,
+      );
+      final bradykinesia = _bradykinesiaScorer.score(bradyInputs);
+
       final result = GaitAnalysisResult(
         probability: gaitResult.probability,
         isImpaired: gaitResult.isImpaired,
@@ -212,6 +228,7 @@ class GaitPipeline extends ChangeNotifier {
         severityLabel: gaitResult.severityLabel,
         timestamp: DateTime.now(),
         samplesUsed: wrist.length,
+        bradykinesia: bradykinesia,
         validation: GaitValidationMetrics(
           stepCount: validation.stepCount,
           stepSymmetry: validation.stepSymmetry,

@@ -63,6 +63,7 @@ flutter:
   assets:
     - assets/gait_classifier.ptl
     - assets/scaler_params.json
+    - assets/bradykinesia_gait_thresholds.json
 
 
   # To add assets to your application, add an assets section, like this:
