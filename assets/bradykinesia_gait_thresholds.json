@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "description": "Bradykinesia gait severity 0-4 from walking speed, stride length, arm swing amplitude and velocity. Bands use normal (label=0) PPMI percentiles; lower speed/shorter stride/smaller arm motion = worse.",
+  "metrics": [
+    "walking_speed_cm_s",
+    "stride_length_m",
+    "arm_swing_amp_deg",
+    "arm_swing_vel_deg_s"
+  ],
+  "thresholds": {
+    "walking_speed_cm_s": {
+      "p20": 100.6,
+      "p40": 112.72532946,
+      "p60": 122.86,
+      "p80": 134.55150650000002,
+      "higher_is_better": true
+    },
+    "stride_length_m": {
+      "p20": 0.5822540610743417,
+      "p40": 0.6348841612761091,
+      "p60": 0.6866668066598957,
+      "p80": 0.7687305196736323,
+      "higher_is_better": true
+    },
+    "arm_swing_amp_deg": {
+      "p20": 23.577169347999998,
+      "p40": 30.399043087000003,
+      "p60": 35.743513549,
+      "p80": 43.799883168,
+      "higher_is_better": true
+    },
+    "arm_swing_vel_deg_s": {
+      "p20": 22.158260230000003,
+      "p40": 27.9024917,
+      "p60": 35.604776196,
+      "p80": 44.230308466,
+      "higher_is_better": true
+    }
+  },
+  "correlations_with_NP3BRADY": {
+    "walking_speed_cm_s": -0.16,
+    "stride_length_m": -0.1,
+    "arm_swing_amp_deg": -0.427,
+    "arm_swing_vel_deg_s": -0.349
+  },
+  "reference_counts": {
+    "normal_rows": 159,
+    "impaired_rows": 77,
+    "total_rows": 236
+  },
+  "notes": {
+    "walking_speed_cm_s": "StepVelocitycmsec or SP_U*100",
+    "stride_length_m": "SP_U*60/CAD_U (metres)",
+    "arm_swing_amp_deg": "mean(RA_AMP_U, LA_AMP_U) degrees",
+    "arm_swing_vel_deg_s": "PPMI: RA_AMP_U proxy; device: wrist gyrZ RMS deg/s"
+  }
+}
