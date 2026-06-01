@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'sensor_config.dart';
 
-/// Raw IMU sample from the XIAO BLE sensor
+/// Raw IMU sample from the Seeed XIAO nRF52840 Sense (wrist).
 class ImuSample {
   final double accX, accY, accZ;
   final double gyrX, gyrY, gyrZ;
@@ -18,10 +19,13 @@ class ImuSample {
     required this.timestamp,
   });
 
-  /// Parse from raw BLE packet bytes: 6x float32 little-endian
-  /// Packet layout: [accX, accY, accZ, gyrX, gyrY, gyrZ] each 4 bytes
+  /// Parse from raw BLE notification (current firmware contract).
+  ///
+  /// Layout: 6× float32 little-endian — accX, accY, accZ, gyrX, gyrY, gyrZ.
+  /// Future firmware may send compressed feature packets instead; those require
+  /// a separate parser and must not use [fromBytes].
   factory ImuSample.fromBytes(List<int> bytes) {
-    if (bytes.length < 24) {
+    if (bytes.length < SensorConfig.bleRawPacketBytes) {
       throw FormatException('IMU packet too short: ${bytes.length} bytes');
     }
     final buf = Uint8List.fromList(bytes).buffer;
@@ -61,8 +65,11 @@ class BleService extends ChangeNotifier {
   /// IMU notification characteristic UUID (update to match firmware)
   static const String _imuCharUuid = '12345678-1234-1234-1234-123456789abc';
 
+  /// Nominal ODR for XIAO LSM6DS3 (Seeed library default: 104 Hz).
+  static const int nominalSampleRateHz = SensorConfig.xiaoLsm6ds3OdrHz;
+
   // ── Simulator parameters (mimics a moderately-impaired gait pattern) ──────
-  static const int _simSampleRateHz = 50;       // samples per second
+  static const int _simSampleRateHz = nominalSampleRateHz;
   static const double _simStrideHz  = 0.9;      // ~108 steps/min cadence
   static const double _simArmAmpDeg = 18.0;     // arm swing amplitude (degrees)
   static const double _simNoise     = 0.08;     // sensor noise level
@@ -124,18 +131,13 @@ class BleService extends ChangeNotifier {
     _simTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) {
       _simT += 1.0 / _simSampleRateHz;
 
-      // Trunk vertical acceleration — gait oscillation at stride frequency
-      final stridePhase = 2 * pi * _simStrideHz * _simT;
-      final accZ = 9.8 + 0.8 * sin(stridePhase) + _noise();
+      // Wrist accelerometer — small sway; cadence comes from phone sensor.
+      final armPhase = 2 * pi * _simStrideHz * _simT;
+      final accZ = 9.8 + 0.12 * sin(armPhase) + _noise();
+      final accX = 0.08 * sin(armPhase * 0.5 + 0.3) + _noise();
+      final accY = 0.15 * cos(armPhase) + _noise();
 
-      // Mediolateral sway
-      final accX = 0.15 * sin(stridePhase * 0.5 + 0.3) + _noise();
-
-      // Anteroposterior
-      final accY = 0.4 * cos(stridePhase) + _noise();
-
-      // Arm swing — wrist gyroscope (simulates wrist rotation during walking)
-      final armPhase = 2 * pi * _simStrideHz * _simT + pi; // antiphase to trunk
+      // Wrist gyro — arm swing (deg/s scale)
       final gyrZ = _simArmAmpDeg * sin(armPhase) + _noise() * 5;
       final gyrX = 8.0 * cos(armPhase * 0.5) + _noise() * 3;
       final gyrY = 3.0 * sin(armPhase + 0.8) + _noise() * 2;

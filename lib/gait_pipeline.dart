@@ -2,16 +2,22 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'ble_service.dart';
+import 'gait_dsp.dart';
 import 'gait_inference.dart';
+import 'gait_validation.dart';
+import 'phone_sensor_service.dart';
+import 'sensor_config.dart';
 
 /// One complete gait analysis result
 class GaitAnalysisResult {
   final double probability;
   final bool isImpaired;
-  final int severityLevel;       // 0=healthy,1=mild,2=moderate,3=severe,4=very severe
+  final int severityLevel;
   final String severityLabel;
   final DateTime timestamp;
   final int samplesUsed;
+  final GaitValidationMetrics validation;
+  final Map<String, double?> features;
 
   GaitAnalysisResult({
     required this.probability,
@@ -20,66 +26,62 @@ class GaitAnalysisResult {
     required this.severityLabel,
     required this.timestamp,
     required this.samplesUsed,
+    required this.validation,
+    required this.features,
   });
 
   @override
   String toString() =>
       'GaitAnalysisResult(prob=${probability.toStringAsFixed(3)}, '
-      'severity=$severityLevel/$severityLabel, samples=$samplesUsed)';
+      'severity=$severityLevel/$severityLabel, samples=$samplesUsed, '
+      'steps=${validation.stepCount})';
 }
 
-/// Buffers raw IMU samples from BleService, extracts the 27-feature vector,
-/// and calls GaitInferenceEngine every [_analysisIntervalSec] seconds.
+/// Dual-sensor gait pipeline: wrist BLE (XIAO) + phone accelerometer.
 ///
-/// Feature groups (mirrors train_gait.py v7):
-///   OPALS_UNIVERSAL : CAD_U, STR_CV_U, SP_U
-///   OPALS_ARMSWING  : RA_AMP_U, LA_AMP_U, SYM_U, ASA_U  + has_armswing
-///   OPALS_SWAY      : SW_VEL_OP, SW_PATH_OP, SW_FREQ_OP  + has_sway
-///   AXIVITY         : 14 free-living features             + has_axivity
-///   GAIT_SUBGROUP   : 1 subgroup flag
-///
-/// Formulas follow the official PPMI Gait Assessment Methods Document
-/// (Mirelman, Tel Aviv Medical Center / APDM Opals, 2018).
+/// Cadence, stride variability, walking speed, and Axivity-style step metrics
+/// are derived from the phone. Arm swing, symmetry, and sway use the wrist IMU.
 class GaitPipeline extends ChangeNotifier {
-  // ── Configuration ─────────────────────────────────────────────────────────
-  static const int    _sampleRateHz        = 50;
-  static const int    _windowSec           = 20;   // analysis window length
-  static const int    _analysisIntervalSec = 20;   // matches window length
-  static const int    _minSamplesRequired  = _sampleRateHz * 10; // 10s minimum
+  static const int _windowSec = SensorConfig.gaitWindowSec;
+  static const int _analysisIntervalSec = SensorConfig.gaitWindowSec;
+  static const int _minSamplesRequired =
+      SensorConfig.xiaoLsm6ds3OdrHz * SensorConfig.gaitMinBufferSec;
 
-  /// Minimum peak-to-peak arm swing amplitude (deg) to count as active swing.
-  /// Below this the person is considered stationary — has_armswing = 0.
   static const double _minArmSwingDeg = 5.0;
+  static const double _avgStepLengthM = 0.75;
 
-  final BleService          _ble;
+  final BleService _ble;
+  final PhoneSensorService _phone;
   final GaitInferenceEngine _engine;
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  final List<ImuSample> _buffer = [];
-  StreamSubscription<ImuSample>? _sub;
-  Timer?  _analysisTimer;
-  bool    _engineReady = false;
+  final List<ImuSample> _wristBuffer = [];
+  final List<PhoneAccelSample> _phoneBuffer = [];
+  StreamSubscription<ImuSample>? _wristSub;
+  StreamSubscription<PhoneAccelSample>? _phoneSub;
+  Timer? _analysisTimer;
+  bool _engineReady = false;
   String? _lastError;
 
   GaitAnalysisResult? _latestResult;
-  bool   _isAnalysing = false;
+  bool _isAnalysing = false;
 
-  GaitAnalysisResult? get latestResult  => _latestResult;
-  bool                get isAnalysing   => _isAnalysing;
-  String?             get lastError     => _lastError;
-  int                 get bufferSize    => _buffer.length;
-  bool                get engineReady   => _engineReady;
+  GaitAnalysisResult? get latestResult => _latestResult;
+  bool get isAnalysing => _isAnalysing;
+  String? get lastError => _lastError;
+  int get wristBufferSize => _wristBuffer.length;
+  int get phoneBufferSize => _phoneBuffer.length;
+  bool get engineReady => _engineReady;
 
-  // ── Output stream ─────────────────────────────────────────────────────────
   final _resultController = StreamController<GaitAnalysisResult>.broadcast();
   Stream<GaitAnalysisResult> get resultStream => _resultController.stream;
 
-  // ── Constructor ───────────────────────────────────────────────────────────
-  GaitPipeline({required BleService ble, required GaitInferenceEngine engine})
-      : _ble    = ble,
+  GaitPipeline({
+    required BleService ble,
+    required PhoneSensorService phone,
+    required GaitInferenceEngine engine,
+  })  : _ble = ble,
+        _phone = phone,
         _engine = engine;
-
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   Future<void> init() async {
     try {
@@ -93,32 +95,39 @@ class GaitPipeline extends ChangeNotifier {
     notifyListeners();
   }
 
-  void start() {
+  Future<void> start() async {
     if (!_engineReady) {
       _lastError = 'Engine not ready — call init() first';
       notifyListeners();
       return;
     }
 
-    // Subscribe to BLE sample stream
-    _sub = _ble.sampleStream.listen(_onSample);
+    await _phone.start();
+    await _ble.start();
 
-    // Run analysis every N seconds
+    _wristSub = _ble.sampleStream.listen(_onWristSample);
+    _phoneSub = _phone.sampleStream.listen(_onPhoneSample);
+
     _analysisTimer = Timer.periodic(
-      Duration(seconds: _analysisIntervalSec),
+      const Duration(seconds: _analysisIntervalSec),
       (_) => _runAnalysis(),
     );
 
-    debugPrint('[GaitPipeline] Started');
+    debugPrint('[GaitPipeline] Started (dual-sensor)');
     notifyListeners();
   }
 
   void stop() {
-    _sub?.cancel();
-    _sub = null;
+    _wristSub?.cancel();
+    _wristSub = null;
+    _phoneSub?.cancel();
+    _phoneSub = null;
     _analysisTimer?.cancel();
     _analysisTimer = null;
-    _buffer.clear();
+    _ble.stop();
+    _phone.stop();
+    _wristBuffer.clear();
+    _phoneBuffer.clear();
     debugPrint('[GaitPipeline] Stopped');
     notifyListeners();
   }
@@ -130,130 +139,293 @@ class GaitPipeline extends ChangeNotifier {
     super.dispose();
   }
 
-  // ── Sample ingestion ──────────────────────────────────────────────────────
-
-  void _onSample(ImuSample sample) {
-    _buffer.add(sample);
-    // Keep only the last [_windowSec] seconds worth of samples
-    final maxSamples = _sampleRateHz * _windowSec;
-    if (_buffer.length > maxSamples) {
-      _buffer.removeRange(0, _buffer.length - maxSamples);
-    }
+  void _onWristSample(ImuSample sample) {
+    _wristBuffer.add(sample);
+    _trimBuffer(
+      _wristBuffer,
+      maxSamples: _maxWristSamples(),
+      timestamp: (s) => (s as ImuSample).timestamp,
+    );
   }
 
-  // ── Feature extraction & inference ────────────────────────────────────────
+  void _onPhoneSample(PhoneAccelSample sample) {
+    _phoneBuffer.add(sample);
+    _trimBuffer(
+      _phoneBuffer,
+      maxSamples: _maxPhoneSamples(),
+      timestamp: (s) => (s as PhoneAccelSample).timestamp,
+    );
+  }
+
+  int _maxWristSamples() =>
+      (SensorConfig.xiaoLsm6ds3OdrHz * _windowSec * 1.2).round();
+
+  int _maxPhoneSamples() => _maxWristSamples();
+
+  void _trimBuffer(
+    List<dynamic> buffer, {
+    required int maxSamples,
+    required DateTime Function(dynamic) timestamp,
+  }) {
+    if (buffer.length <= maxSamples) return;
+    final cutoff = timestamp(buffer.last).subtract(
+      Duration(seconds: _windowSec),
+    );
+    while (buffer.isNotEmpty && timestamp(buffer.first).isBefore(cutoff)) {
+      buffer.removeAt(0);
+    }
+    if (buffer.length > maxSamples) {
+      buffer.removeRange(0, buffer.length - maxSamples);
+    }
+  }
 
   Future<void> _runAnalysis() async {
-  if (_buffer.length < _minSamplesRequired) {
-    debugPrint('[GaitPipeline] Not enough samples yet: ${_buffer.length}');
-    return;
-  }
-  if (_isAnalysing) return;
+    if (_wristBuffer.length < _minSamplesRequired) {
+      debugPrint(
+        '[GaitPipeline] Not enough wrist samples: ${_wristBuffer.length}',
+      );
+      return;
+    }
+    if (_isAnalysing) return;
 
-  _isAnalysing = true;
-  notifyListeners();
-
-  try {
-    final snapshot = List<ImuSample>.from(_buffer);
-    final features = _extractFeatures(snapshot);
-    final gaitResult = await _engine.predict(features);
-
-    final result = GaitAnalysisResult(
-      probability: gaitResult.probability,
-      isImpaired: gaitResult.isImpaired,
-      severityLevel: gaitResult.severity,
-      severityLabel: gaitResult.severityLabel,
-      timestamp: DateTime.now(),
-      samplesUsed: snapshot.length,
-    );
-
-    _latestResult = result;
-    _resultController.add(result);
-    _lastError = null;
-    debugPrint('[GaitPipeline] $result');
-  } catch (e) {
-    _lastError = 'Analysis failed: $e';
-    debugPrint('[GaitPipeline] $_lastError');
-  } finally {
-    _isAnalysing = false;
+    _isAnalysing = true;
     notifyListeners();
-  }
-}
 
-  /// Trigger an immediate analysis (e.g. for UI "Analyse Now" button)
+    try {
+      final wrist = List<ImuSample>.from(_wristBuffer);
+      final phone = List<PhoneAccelSample>.from(_phoneBuffer);
+      final extracted = _extractFeatures(wrist: wrist, phone: phone);
+      final features = extracted.features;
+      final validation = extracted.validation;
+
+      final validatorWarnings = GaitModelValidator.validate(features);
+      if (validatorWarnings.isNotEmpty) {
+        debugPrint('[GaitPipeline] Validation: $validatorWarnings');
+      }
+
+      final gaitResult = await _engine.predict(features);
+
+      final result = GaitAnalysisResult(
+        probability: gaitResult.probability,
+        isImpaired: gaitResult.isImpaired,
+        severityLevel: gaitResult.severity,
+        severityLabel: gaitResult.severityLabel,
+        timestamp: DateTime.now(),
+        samplesUsed: wrist.length,
+        validation: GaitValidationMetrics(
+          stepCount: validation.stepCount,
+          stepSymmetry: validation.stepSymmetry,
+          armSwingVelocityRmsDegS: validation.armSwingVelocityRmsDegS,
+          armSwingRegularity: validation.armSwingRegularity,
+          wristSampleRateHz: validation.wristSampleRateHz,
+          phoneSampleRateHz: validation.phoneSampleRateHz,
+          phoneUsedForCadence: validation.phoneUsedForCadence,
+          warnings: [...validation.warnings, ...validatorWarnings],
+        ),
+        features: features,
+      );
+
+      _latestResult = result;
+      _resultController.add(result);
+      _lastError = null;
+      debugPrint('[GaitPipeline] $result');
+    } catch (e) {
+      _lastError = 'Analysis failed: $e';
+      debugPrint('[GaitPipeline] $_lastError');
+    } finally {
+      _isAnalysing = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> analyseNow() => _runAnalysis();
 
-  // ── Feature extraction ────────────────────────────────────────────────────
-  //
-  // Implements the PPMI Gait Assessment Methods Document formulas exactly.
-  // RA_AMP_U / LA_AMP_U: peak-to-peak angular range per swing half-cycle
-  //   (degrees), computed by integrating gyrZ over each half-cycle via
-  //   trapezoidal rule with per-segment linear detrending to eliminate gyro
-  //   drift, then averaging across all detected cycles.
-  // SYM_U:  1 - (RA_AMP / LA_AMP)  [PPMI formula]
-  // ASA_U:  (45 - arctan(greater/smaller) * 180/pi) * 100 / 90  [PPMI formula]
-  // Axivity features always null — model handles via median imputation.
+  /// Runs feature extraction on provided buffers (for unit tests).
+  ({Map<String, double?> features, GaitValidationMetrics validation})
+      extractForTest({
+    required List<ImuSample> wrist,
+    required List<PhoneAccelSample> phone,
+  }) {
+    return _extractFeatures(wrist: wrist, phone: phone);
+  }
 
-  Map<String, double?> _extractFeatures(List<ImuSample> samples) {
-    final dt = 1.0 / _sampleRateHz;
+  ({Map<String, double?> features, GaitValidationMetrics validation})
+      _extractFeatures({
+    required List<ImuSample> wrist,
+    required List<PhoneAccelSample> phone,
+  }) {
+    final wristFs = SensorConfig.estimateSampleRateHz(
+      wrist.map((s) => s.timestamp).toList(),
+    );
+    final phoneFs = phone.length >= 4
+        ? SensorConfig.estimateSampleRateHz(
+            phone.map((s) => s.timestamp).toList(),
+          )
+        : wristFs;
 
-    // ── Accelerometer vertical (Z) for gait timing ─────────────────────────
-    final accZ = samples.map((s) => s.accZ).toList();
-    final peaks = _detectPeaks(accZ, _sampleRateHz);
+    final phoneUsed = phone.length >= _minSamplesRequired ~/ 4;
+    final phoneGait = phoneUsed
+        ? _phoneGaitMetrics(phone, phoneFs)
+        : _PhoneGaitMetrics.empty();
 
-    double? cad;
-    double? strCv;
-    double? sp;
-    if (peaks.length >= 4) {
-      final intervals = <double>[];
-      for (int i = 1; i < peaks.length; i++) {
-        intervals.add((peaks[i] - peaks[i - 1]) / _sampleRateHz);
-      }
-      final meanInterval = _mean(intervals);
-      cad   = meanInterval > 0 ? (60.0 / meanInterval) : null;
-      strCv = meanInterval > 0 ? (_std(intervals) / meanInterval * 100) : null;
-      // Walking speed proxy: cadence × 0.75m (avg step length)
-      sp    = cad != null ? (cad * 0.75 / 60.0) : null;
+    final arm = _armSwingMetrics(wrist, wristFs);
+
+    final warnings = <String>[];
+    if (!phoneUsed) {
+      warnings.add(
+        'Insufficient phone accelerometer data — cadence imputed by model',
+      );
     }
 
-    // ── Arm swing amplitude in DEGREES via gyroscope integration ──────────
-    // Per PPMI doc: amplitude = range from peak anterior to posterior movement.
-    // Integrate gyrZ (deg/s) over each swing half-cycle using the trapezoidal
-    // rule to get angular displacement (degrees). Each half-cycle is integrated
-    // and detrended independently (linear baseline removal) to eliminate
-    // gyroscope drift — prevents drift accumulation across the 20s window.
-    final gyrZ = samples.map((s) => s.gyrZ).toList();
+    final hasAxivity = phoneGait.hasValidSteps ? 1.0 : 0.0;
 
-    // Detect swing half-cycles using zero-crossings of gyrZ
+    final features = <String, double?>{
+      'CAD_U': phoneGait.cadence,
+      'STR_CV_U': phoneGait.strideCvPercent,
+      'SP_U': phoneGait.speedMs,
+      'RA_AMP_U': arm.raAmp,
+      'LA_AMP_U': arm.laAmp,
+      'SYM_U': arm.sym,
+      'ASA_U': arm.asa,
+      'has_armswing': arm.hasArmswing,
+      'SW_VEL_OP': arm.swVel,
+      'SW_PATH_OP': arm.swPath,
+      'SW_FREQ_OP': arm.swFreq,
+      'has_sway': arm.hasSway,
+      'MeanSVMDaymg': null,
+      'PercentWalking': phoneGait.percentWalking,
+      'ActivityLevel': phoneGait.activityLevel,
+      'CadencetimeDomain': phoneGait.cadence,
+      'NumberOfBouts': phoneGait.boutCount.toDouble(),
+      'wdV': phoneGait.walkingDurationFraction,
+      'stepTime': phoneGait.stepTime,
+      'strideTime': phoneGait.strideTime,
+      'CVStrideTime': phoneGait.cvStrideTime,
+      'SampEntropyV': phoneGait.sampleEntropy,
+      'stepAsymV': phoneGait.stepAsym,
+      'StepVelocitycmsec':
+          phoneGait.speedMs != null ? phoneGait.speedMs! * 100 : null,
+      'rmsV': phoneGait.rmsAccel,
+      'has_axivity': hasAxivity,
+      'GAIT_SUBGROUP': 0.0,
+    };
+
+    final validation = GaitValidationMetrics(
+      stepCount: phoneGait.stepCount,
+      stepSymmetry: phoneGait.stepSymmetry,
+      armSwingVelocityRmsDegS: arm.velocityRmsDegS,
+      armSwingRegularity: arm.regularity,
+      wristSampleRateHz: wristFs,
+      phoneSampleRateHz: phoneFs,
+      phoneUsedForCadence: phoneUsed && phoneGait.hasValidSteps,
+      warnings: warnings,
+    );
+
+    return (features: features, validation: validation);
+  }
+
+  _PhoneGaitMetrics _phoneGaitMetrics(List<PhoneAccelSample> phone, double fs) {
+    final mag = phone.map((s) => s.magnitude).toList();
+    final peaks = GaitDsp.detectPeaks(mag, fs);
+  final intervals = GaitDsp.peakIntervalsSec(peaks, fs);
+
+    if (intervals.length < 3) {
+      return _PhoneGaitMetrics.empty();
+    }
+
+    final meanStep = GaitDsp.mean(intervals);
+    final cad = meanStep > 0 ? 60.0 / meanStep : null;
+    final strideCv = meanStep > 0 ? GaitDsp.std(intervals) / meanStep * 100 : null;
+    final speed = cad != null ? cad * _avgStepLengthM / 60.0 : null;
+    final stepAsym = GaitDsp.stepAsymmetry(intervals);
+    final stepSymmetry =
+        stepAsym != null ? (1.0 - stepAsym).clamp(0.0, 1.0) : null;
+
+    final walkingThreshold = GaitDsp.mean(mag) * 0.6;
+    final walkingSamples =
+        mag.where((v) => v > walkingThreshold).length;
+    final percentWalking = phone.isNotEmpty
+        ? 100.0 * walkingSamples / phone.length
+        : null;
+
+    return _PhoneGaitMetrics(
+      hasValidSteps: true,
+      stepCount: peaks.length,
+      cadence: cad,
+      strideCvPercent: strideCv,
+      speedMs: speed,
+      stepTime: meanStep,
+      strideTime: meanStep * 2,
+      cvStrideTime: strideCv,
+      stepAsym: stepAsym,
+      stepSymmetry: stepSymmetry,
+      sampleEntropy: GaitDsp.sampleEntropy(intervals),
+      rmsAccel: GaitDsp.rms(mag),
+      percentWalking: percentWalking,
+      activityLevel: percentWalking != null ? percentWalking / 100 : null,
+      boutCount: _countWalkingBouts(mag, walkingThreshold, fs),
+      walkingDurationFraction: phone.isNotEmpty
+          ? walkingSamples / phone.length
+          : null,
+    );
+  }
+
+  int _countWalkingBouts(List<double> mag, double threshold, double fs) {
+    var inBout = false;
+    var bouts = 0;
+    var boutLen = 0;
+    const minBoutSamples = 20;
+
+    for (final v in mag) {
+      if (v > threshold) {
+        if (!inBout) {
+          inBout = true;
+          boutLen = 1;
+        } else {
+          boutLen++;
+        }
+      } else if (inBout) {
+        if (boutLen >= minBoutSamples) bouts++;
+        inBout = false;
+        boutLen = 0;
+      }
+    }
+    if (inBout && boutLen >= minBoutSamples) bouts++;
+    return bouts;
+  }
+
+  _ArmSwingMetrics _armSwingMetrics(List<ImuSample> samples, double fs) {
+    final dt = 1.0 / fs;
+    final gyrZ = samples.map((s) => s.gyrZ).toList();
+    final accX = samples.map((s) => s.accX).toList();
+    final accY = samples.map((s) => s.accY).toList();
+
     final zeroCrossings = <int>[];
     for (int i = 1; i < gyrZ.length; i++) {
       if (gyrZ[i - 1] * gyrZ[i] < 0) zeroCrossings.add(i);
     }
 
-    final rightCycleAmps = <double>[]; // positive half-cycles (forward swing)
-    final leftCycleAmps  = <double>[]; // negative half-cycles (backward swing)
+    final rightCycleAmps = <double>[];
+    final leftCycleAmps = <double>[];
 
     for (int i = 0; i < zeroCrossings.length - 1; i++) {
-      final start  = zeroCrossings[i];
-      final end    = zeroCrossings[i + 1];
+      final start = zeroCrossings[i];
+      final end = zeroCrossings[i + 1];
       final segGyr = gyrZ.sublist(start, end + 1);
-      final n      = segGyr.length;
+      final n = segGyr.length;
 
-      // Integrate THIS segment only (trapezoidal rule) — no cross-segment drift
       final segAngle = List<double>.filled(n, 0.0);
       for (int j = 1; j < n; j++) {
         segAngle[j] = segAngle[j - 1] + (segGyr[j - 1] + segGyr[j]) * 0.5 * dt;
       }
 
-      // Linear detrend: subtract straight line from segAngle[0] to segAngle[n-1]
       final slope = (segAngle[n - 1] - segAngle[0]) / (n - 1);
       final detrended = List<double>.generate(
-        n, (j) => segAngle[j] - (segAngle[0] + slope * j),
+        n,
+        (j) => segAngle[j] - (segAngle[0] + slope * j),
       );
 
       final ampRange = detrended.reduce(max) - detrended.reduce(min);
-
-      // Positive gyrZ midpoint = forward (right arm) swing
       if (gyrZ[(start + end) ~/ 2] > 0) {
         rightCycleAmps.add(ampRange);
       } else {
@@ -261,140 +433,141 @@ class GaitPipeline extends ChangeNotifier {
       }
     }
 
-    // Average amplitude per arm (degrees) — PPMI RA_AMP_U / LA_AMP_U
-    final raAmp = rightCycleAmps.isNotEmpty ? _mean(rightCycleAmps) : null;
-    final laAmp = leftCycleAmps.isNotEmpty  ? _mean(leftCycleAmps)  : null;
+    final raAmp = rightCycleAmps.isNotEmpty ? GaitDsp.mean(rightCycleAmps) : null;
+    final laAmp = leftCycleAmps.isNotEmpty ? GaitDsp.mean(leftCycleAmps) : null;
 
-    // Only flag as active arm swing if amplitude exceeds minimum threshold
-    final hasArmswing = (raAmp != null && raAmp >= _minArmSwingDeg &&
-                         laAmp != null && laAmp >= _minArmSwingDeg) ? 1.0 : 0.0;
+    final hasArmswing =
+        (raAmp != null &&
+            raAmp >= _minArmSwingDeg &&
+            laAmp != null &&
+            laAmp >= _minArmSwingDeg)
+        ? 1.0
+        : 0.0;
 
-    // Null out amplitudes below threshold (treat as missing for model)
-    final raAmpFinal = (raAmp != null && raAmp >= _minArmSwingDeg) ? raAmp : null;
-    final laAmpFinal = (laAmp != null && laAmp >= _minArmSwingDeg) ? laAmp : null;
+    final raAmpFinal =
+        (raAmp != null && raAmp >= _minArmSwingDeg) ? raAmp : null;
+    final laAmpFinal =
+        (laAmp != null && laAmp >= _minArmSwingDeg) ? laAmp : null;
 
-    // ── SYM_U: Between-arm symmetry (PPMI formula) ─────────────────────────
-    // Sym = 1 - (AverageAmplitudeRight / AverageAmplitudeLeft)
     double? sym;
     if (raAmpFinal != null && laAmpFinal != null && laAmpFinal > 0) {
       sym = 1.0 - (raAmpFinal / laAmpFinal);
     }
 
-    // ── ASA_U: Arm swing asymmetry (PPMI formula) ──────────────────────────
-    // ASA = (45 - arctan(greater / smaller) * (180/pi)) * 100 / 90
     double? asa;
-    if (raAmpFinal != null && laAmpFinal != null &&
-        raAmpFinal > 0 && laAmpFinal > 0) {
+    if (raAmpFinal != null &&
+        laAmpFinal != null &&
+        raAmpFinal > 0 &&
+        laAmpFinal > 0) {
       final greater = raAmpFinal >= laAmpFinal ? raAmpFinal : laAmpFinal;
-      final smaller = raAmpFinal <  laAmpFinal ? raAmpFinal : laAmpFinal;
+      final smaller = raAmpFinal < laAmpFinal ? raAmpFinal : laAmpFinal;
       asa = (45.0 - (atan(greater / smaller) * 180.0 / pi)) * 100.0 / 90.0;
     }
 
-    // ── Trunk sway from accelerometer AP (Y) and ML (X) ────────────────────
-    // SW_VEL_OP : RMS of AP+ML acceleration (mean velocity proxy)
-    // SW_PATH_OP: total CoP trajectory length from incremental AP+ML displacement
-    // SW_FREQ_OP: centroidal frequency via zero-crossing rate on AP axis
-    final accX = samples.map((s) => s.accX).toList();
-    final accY = samples.map((s) => s.accY).toList();
+    final allAmps = [...rightCycleAmps, ...leftCycleAmps];
+    double? regularity;
+    if (allAmps.length >= 3) {
+      final mu = GaitDsp.mean(allAmps);
+      regularity = mu > 0 ? GaitDsp.std(allAmps) / mu : null;
+    }
 
-    final swVel = _rms([...accX, ...accY]);
+    final activeGyr = gyrZ.where((g) => g.abs() > 5).toList();
+    final velocityRms =
+        activeGyr.isNotEmpty ? GaitDsp.rms(activeGyr) : null;
 
-    double swPath = 0.0;
+    final swVel = GaitDsp.rms([...accX, ...accY]);
+    var swPath = 0.0;
     for (int i = 1; i < samples.length; i++) {
       final dAP = (accY[i] - accY[i - 1]).abs();
       final dML = (accX[i] - accX[i - 1]).abs();
       swPath += sqrt(dAP * dAP + dML * dML) * dt;
     }
+    final swFreq = GaitDsp.dominantFreq(accY, fs);
 
-    final swFreq = _dominantFreq(accY, _sampleRateHz);
-    const hasSway = 1.0;
-
-    // CVStrideTime reused from stride intervals
-    final cvStrideTime = strCv;
-
-    return {
-      // OPALS_UNIVERSAL
-      'CAD_U'             : cad,
-      'STR_CV_U'          : strCv,
-      'SP_U'              : sp,
-      // OPALS_ARMSWING (all in degrees, per PPMI doc)
-      'RA_AMP_U'          : raAmpFinal,
-      'LA_AMP_U'          : laAmpFinal,
-      'SYM_U'             : sym,
-      'ASA_U'             : asa,
-      'has_armswing'      : hasArmswing,
-      // OPALS_SWAY
-      'SW_VEL_OP'         : swVel,
-      'SW_PATH_OP'        : swPath,
-      'SW_FREQ_OP'        : swFreq,
-      'has_sway'          : hasSway,
-      // AXIVITY (not available from wrist sensor — imputed by model)
-      'MeanSVMDaymg'      : null,
-      'PercentWalking'    : null,
-      'ActivityLevel'     : null,
-      'CadencetimeDomain' : null,
-      'NumberOfBouts'     : null,
-      'wdV'               : null,
-      'stepTime'          : null,
-      'strideTime'        : null,
-      'CVStrideTime'      : cvStrideTime,
-      'SampEntropyV'      : null,
-      'stepAsymV'         : null,
-      'StepVelocitycmsec' : sp != null ? sp * 100 : null,
-      'rmsV'              : _rms(accZ),
-      'has_axivity'       : 0.0,
-      // Subgroup
-      'GAIT_SUBGROUP'     : 0.0,
-    };
+    return _ArmSwingMetrics(
+      raAmp: raAmpFinal,
+      laAmp: laAmpFinal,
+      sym: sym,
+      asa: asa,
+      hasArmswing: hasArmswing,
+      swVel: swVel,
+      swPath: swPath,
+      swFreq: swFreq,
+      hasSway: 1.0,
+      velocityRmsDegS: velocityRms,
+      regularity: regularity,
+    );
   }
+}
 
-  // ── DSP helpers ───────────────────────────────────────────────────────────
+class _PhoneGaitMetrics {
+  final bool hasValidSteps;
+  final int stepCount;
+  final double? cadence;
+  final double? strideCvPercent;
+  final double? speedMs;
+  final double? stepTime;
+  final double? strideTime;
+  final double? cvStrideTime;
+  final double? stepAsym;
+  final double? stepSymmetry;
+  final double? sampleEntropy;
+  final double? rmsAccel;
+  final double? percentWalking;
+  final double? activityLevel;
+  final int boutCount;
+  final double? walkingDurationFraction;
 
-  /// Simple peak detection: local maxima above mean + 0.3*std threshold
-  List<int> _detectPeaks(List<double> signal, int fs) {
-    final mu      = _mean(signal);
-    final sd      = _std(signal);
-    final thr     = mu + 0.3 * sd;
-    final minDist = (fs * 0.35).round(); // min 350ms between peaks
+  const _PhoneGaitMetrics({
+    required this.hasValidSteps,
+    required this.stepCount,
+    this.cadence,
+    this.strideCvPercent,
+    this.speedMs,
+    this.stepTime,
+    this.strideTime,
+    this.cvStrideTime,
+    this.stepAsym,
+    this.stepSymmetry,
+    this.sampleEntropy,
+    this.rmsAccel,
+    this.percentWalking,
+    this.activityLevel,
+    required this.boutCount,
+    this.walkingDurationFraction,
+  });
 
-    final peaks = <int>[];
-    for (int i = 1; i < signal.length - 1; i++) {
-      if (signal[i] > thr &&
-          signal[i] > signal[i - 1] &&
-          signal[i] > signal[i + 1]) {
-        if (peaks.isEmpty || (i - peaks.last) >= minDist) {
-          peaks.add(i);
-        }
-      }
-    }
-    return peaks;
-  }
+  factory _PhoneGaitMetrics.empty() => const _PhoneGaitMetrics(
+        hasValidSteps: false,
+        stepCount: 0,
+        boutCount: 0,
+      );
+}
 
-  double _mean(List<double> x) {
-    if (x.isEmpty) return 0;
-    return x.reduce((a, b) => a + b) / x.length;
-  }
+class _ArmSwingMetrics {
+  final double? raAmp;
+  final double? laAmp;
+  final double? sym;
+  final double? asa;
+  final double hasArmswing;
+  final double swVel;
+  final double swPath;
+  final double swFreq;
+  final double hasSway;
+  final double? velocityRmsDegS;
+  final double? regularity;
 
-  double _std(List<double> x) {
-    if (x.length < 2) return 0;
-    final mu = _mean(x);
-    final sq = x.map((v) => (v - mu) * (v - mu));
-    return sqrt(sq.reduce((a, b) => a + b) / (x.length - 1));
-  }
-
-  double _rms(List<double> x) {
-    if (x.isEmpty) return 0;
-    return sqrt(x.map((v) => v * v).reduce((a, b) => a + b) / x.length);
-  }
-
-  /// Dominant frequency via zero-crossing rate (lightweight FFT approximation)
-  double _dominantFreq(List<double> signal, int fs) {
-    if (signal.length < 2) return 0;
-    final mu = _mean(signal);
-    int crossings = 0;
-    for (int i = 1; i < signal.length; i++) {
-      if ((signal[i - 1] - mu) * (signal[i] - mu) < 0) crossings++;
-    }
-    return (crossings / 2.0) / (signal.length / fs);
-  }
+  const _ArmSwingMetrics({
+    this.raAmp,
+    this.laAmp,
+    this.sym,
+    this.asa,
+    required this.hasArmswing,
+    required this.swVel,
+    required this.swPath,
+    required this.swFreq,
+    required this.hasSway,
+    this.velocityRmsDegS,
+    this.regularity,
+  });
 }
