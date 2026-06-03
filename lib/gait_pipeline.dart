@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'ble_service.dart';
 import 'gait_dsp.dart';
 import 'gait_inference.dart';
+import 'signal_utils.dart';
+import 'bradykinesia_gait.dart';
 import 'gait_validation.dart';
 import 'phone_sensor_service.dart';
 import 'sensor_config.dart';
@@ -12,12 +14,19 @@ import 'sensor_config.dart';
 class GaitAnalysisResult {
   final double probability;
   final bool isImpaired;
-  final int severityLevel;
+  final int severityLevel;        // 0=healthy,1=mild,2=moderate,3=severe,4=very severe
   final String severityLabel;
   final DateTime timestamp;
   final int samplesUsed;
   final GaitValidationMetrics validation;
   final Map<String, double?> features;
+  final BradykinesiaGaitResult bradykinesia;
+
+  // Raw feature values exposed for downstream use (bradykinesia, UI display).
+  final double? cadenceStepsPerMin;
+  final double? armSwingAmplitudeDeg; // RA_AMP_U (right arm, degrees)
+  final double? strideTimeCV;         // coefficient of variation (%)
+  final double? walkingSpeedMs;       // estimated walking speed (m/s)
 
   GaitAnalysisResult({
     required this.probability,
@@ -28,13 +37,35 @@ class GaitAnalysisResult {
     required this.samplesUsed,
     required this.validation,
     required this.features,
+    required this.bradykinesia,
+    this.cadenceStepsPerMin,
+    this.armSwingAmplitudeDeg,
+    this.strideTimeCV,
+    this.walkingSpeedMs,
   });
+
+  /// Bradykinesia severity inferred from cadence and arm swing amplitude.
+  /// Thresholds are based on published Parkinson's gait norms.
+  int get bradykinesiaSeverity {
+    final cad = cadenceStepsPerMin;
+    final arm = armSwingAmplitudeDeg;
+    if (cad == null && arm == null) return 0;
+    if ((cad != null && cad < 50)  || (arm != null && arm < 2))  return 4;
+    if ((cad != null && cad < 70)  || (arm != null && arm < 5))  return 3;
+    if ((cad != null && cad < 85)  || (arm != null && arm < 10)) return 2;
+    if ((cad != null && cad < 100) || (arm != null && arm < 15)) return 1;
+    return 0;
+  }
+
+  String get bradykinesiaLabel =>
+      const ['Normal', 'Mild', 'Moderate', 'Severe', 'Very Severe'][bradykinesiaSeverity];
 
   @override
   String toString() =>
       'GaitAnalysisResult(prob=${probability.toStringAsFixed(3)}, '
-      'severity=$severityLevel/$severityLabel, samples=$samplesUsed, '
-      'steps=${validation.stepCount})';
+      'severity=$severityLevel/$severityLabel, '
+      'bradykinesia=${bradykinesia.level}/${bradykinesia.label}, '
+      'samples=$samplesUsed, steps=${validation.stepCount})';
 }
 
 /// Dual-sensor gait pipeline: wrist BLE (XIAO) + phone accelerometer.
@@ -53,6 +84,7 @@ class GaitPipeline extends ChangeNotifier {
   final BleService _ble;
   final PhoneSensorService _phone;
   final GaitInferenceEngine _engine;
+  final BradykinesiaGaitScorer _bradykinesiaScorer;
 
   final List<ImuSample> _wristBuffer = [];
   final List<PhoneAccelSample> _phoneBuffer = [];
@@ -65,12 +97,17 @@ class GaitPipeline extends ChangeNotifier {
   GaitAnalysisResult? _latestResult;
   bool _isAnalysing = false;
 
-  GaitAnalysisResult? get latestResult => _latestResult;
-  bool get isAnalysing => _isAnalysing;
-  String? get lastError => _lastError;
-  int get wristBufferSize => _wristBuffer.length;
-  int get phoneBufferSize => _phoneBuffer.length;
-  bool get engineReady => _engineReady;
+  // 7-day rolling trend: (timestamp, bradykinesiaSeverity) pairs.
+  final List<(DateTime, int)> _bradykinesiaTrend = [];
+
+  GaitAnalysisResult?    get latestResult      => _latestResult;
+  bool                   get isAnalysing       => _isAnalysing;
+  String?                get lastError         => _lastError;
+  int                    get wristBufferSize   => _wristBuffer.length;
+  int                    get phoneBufferSize   => _phoneBuffer.length;
+  bool                   get engineReady       => _engineReady;
+  List<(DateTime, int)>  get bradykinesiaTrend =>
+      List.unmodifiable(_bradykinesiaTrend);
 
   final _resultController = StreamController<GaitAnalysisResult>.broadcast();
   Stream<GaitAnalysisResult> get resultStream => _resultController.stream;
@@ -79,13 +116,18 @@ class GaitPipeline extends ChangeNotifier {
     required BleService ble,
     required PhoneSensorService phone,
     required GaitInferenceEngine engine,
+    BradykinesiaGaitScorer? bradykinesiaScorer,
   })  : _ble = ble,
         _phone = phone,
-        _engine = engine;
+        _engine = engine,
+        _bradykinesiaScorer = bradykinesiaScorer ?? BradykinesiaGaitScorer();
 
   Future<void> init() async {
     try {
-      await _engine.init();
+      await Future.wait([
+        _engine.init(),
+        _bradykinesiaScorer.init(),
+      ]);
       _engineReady = true;
       debugPrint('[GaitPipeline] Engine initialised');
     } catch (e) {
@@ -205,29 +247,47 @@ class GaitPipeline extends ChangeNotifier {
 
       final gaitResult = await _engine.predict(features);
 
+      final bradyInputs = BradykinesiaGaitInputs.fromGaitFeatures(
+        features,
+        armSwingVelocityRmsDegS: validation.armSwingVelocityRmsDegS,
+      );
+      final bradykinesia = _bradykinesiaScorer.score(bradyInputs);
+
+      final now = DateTime.now();
       final result = GaitAnalysisResult(
-        probability: gaitResult.probability,
-        isImpaired: gaitResult.isImpaired,
-        severityLevel: gaitResult.severity,
-        severityLabel: gaitResult.severityLabel,
-        timestamp: DateTime.now(),
-        samplesUsed: wrist.length,
+        probability:          gaitResult.probability,
+        isImpaired:           gaitResult.isImpaired,
+        severityLevel:        gaitResult.severity,
+        severityLabel:        gaitResult.severityLabel,
+        timestamp:            now,
+        samplesUsed:          wrist.length,
+        bradykinesia:         bradykinesia,
         validation: GaitValidationMetrics(
-          stepCount: validation.stepCount,
-          stepSymmetry: validation.stepSymmetry,
+          stepCount:               validation.stepCount,
+          stepSymmetry:            validation.stepSymmetry,
           armSwingVelocityRmsDegS: validation.armSwingVelocityRmsDegS,
-          armSwingRegularity: validation.armSwingRegularity,
-          wristSampleRateHz: validation.wristSampleRateHz,
-          phoneSampleRateHz: validation.phoneSampleRateHz,
-          phoneUsedForCadence: validation.phoneUsedForCadence,
+          armSwingRegularity:      validation.armSwingRegularity,
+          wristSampleRateHz:       validation.wristSampleRateHz,
+          phoneSampleRateHz:       validation.phoneSampleRateHz,
+          phoneUsedForCadence:     validation.phoneUsedForCadence,
           warnings: [...validation.warnings, ...validatorWarnings],
         ),
-        features: features,
+        features:             features,
+        cadenceStepsPerMin:   features['CAD_U'],
+        armSwingAmplitudeDeg: features['RA_AMP_U'],
+        strideTimeCV:         features['STR_CV_U'],
+        walkingSpeedMs:       features['SP_U'],
       );
 
       _latestResult = result;
       _resultController.add(result);
       _lastError = null;
+
+      // Update 7-day trend.
+      _bradykinesiaTrend.add((now, result.bradykinesiaSeverity));
+      final cutoff = now.subtract(const Duration(days: 7));
+      _bradykinesiaTrend.removeWhere((e) => e.$1.isBefore(cutoff));
+
       debugPrint('[GaitPipeline] $result');
     } catch (e) {
       _lastError = 'Analysis failed: $e';
@@ -311,14 +371,14 @@ class GaitPipeline extends ChangeNotifier {
     };
 
     final validation = GaitValidationMetrics(
-      stepCount: phoneGait.stepCount,
-      stepSymmetry: phoneGait.stepSymmetry,
+      stepCount:               phoneGait.stepCount,
+      stepSymmetry:            phoneGait.stepSymmetry,
       armSwingVelocityRmsDegS: arm.velocityRmsDegS,
-      armSwingRegularity: arm.regularity,
-      wristSampleRateHz: wristFs,
-      phoneSampleRateHz: phoneFs,
-      phoneUsedForCadence: phoneUsed && phoneGait.hasValidSteps,
-      warnings: warnings,
+      armSwingRegularity:      arm.regularity,
+      wristSampleRateHz:       wristFs,
+      phoneSampleRateHz:       phoneFs,
+      phoneUsedForCadence:     phoneUsed && phoneGait.hasValidSteps,
+      warnings:                warnings,
     );
 
     return (features: features, validation: validation);
@@ -327,7 +387,7 @@ class GaitPipeline extends ChangeNotifier {
   _PhoneGaitMetrics _phoneGaitMetrics(List<PhoneAccelSample> phone, double fs) {
     final mag = phone.map((s) => s.magnitude).toList();
     final peaks = GaitDsp.detectPeaks(mag, fs);
-  final intervals = GaitDsp.peakIntervalsSec(peaks, fs);
+    final intervals = GaitDsp.peakIntervalsSec(peaks, fs);
 
     if (intervals.length < 3) {
       return _PhoneGaitMetrics.empty();
@@ -342,28 +402,27 @@ class GaitPipeline extends ChangeNotifier {
         stepAsym != null ? (1.0 - stepAsym).clamp(0.0, 1.0) : null;
 
     final walkingThreshold = GaitDsp.mean(mag) * 0.6;
-    final walkingSamples =
-        mag.where((v) => v > walkingThreshold).length;
+    final walkingSamples = mag.where((v) => v > walkingThreshold).length;
     final percentWalking = phone.isNotEmpty
         ? 100.0 * walkingSamples / phone.length
         : null;
 
     return _PhoneGaitMetrics(
-      hasValidSteps: true,
-      stepCount: peaks.length,
-      cadence: cad,
-      strideCvPercent: strideCv,
-      speedMs: speed,
-      stepTime: meanStep,
-      strideTime: meanStep * 2,
-      cvStrideTime: strideCv,
-      stepAsym: stepAsym,
-      stepSymmetry: stepSymmetry,
-      sampleEntropy: GaitDsp.sampleEntropy(intervals),
-      rmsAccel: GaitDsp.rms(mag),
-      percentWalking: percentWalking,
-      activityLevel: percentWalking != null ? percentWalking / 100 : null,
-      boutCount: _countWalkingBouts(mag, walkingThreshold, fs),
+      hasValidSteps:           true,
+      stepCount:               peaks.length,
+      cadence:                 cad,
+      strideCvPercent:         strideCv,
+      speedMs:                 speed,
+      stepTime:                meanStep,
+      strideTime:              meanStep * 2,
+      cvStrideTime:            strideCv,
+      stepAsym:                stepAsym,
+      stepSymmetry:            stepSymmetry,
+      sampleEntropy:           GaitDsp.sampleEntropy(intervals),
+      rmsAccel:                GaitDsp.rms(mag),
+      percentWalking:          percentWalking,
+      activityLevel:           percentWalking != null ? percentWalking / 100 : null,
+      boutCount:               _countWalkingBouts(mag, walkingThreshold, fs),
       walkingDurationFraction: phone.isNotEmpty
           ? walkingSamples / phone.length
           : null,
@@ -406,11 +465,11 @@ class GaitPipeline extends ChangeNotifier {
     }
 
     final rightCycleAmps = <double>[];
-    final leftCycleAmps = <double>[];
+    final leftCycleAmps  = <double>[];
 
     for (int i = 0; i < zeroCrossings.length - 1; i++) {
       final start = zeroCrossings[i];
-      final end = zeroCrossings[i + 1];
+      final end   = zeroCrossings[i + 1];
       final segGyr = gyrZ.sublist(start, end + 1);
       final n = segGyr.length;
 
@@ -434,7 +493,7 @@ class GaitPipeline extends ChangeNotifier {
     }
 
     final raAmp = rightCycleAmps.isNotEmpty ? GaitDsp.mean(rightCycleAmps) : null;
-    final laAmp = leftCycleAmps.isNotEmpty ? GaitDsp.mean(leftCycleAmps) : null;
+    final laAmp = leftCycleAmps.isNotEmpty  ? GaitDsp.mean(leftCycleAmps)  : null;
 
     final hasArmswing =
         (raAmp != null &&
@@ -444,10 +503,8 @@ class GaitPipeline extends ChangeNotifier {
         ? 1.0
         : 0.0;
 
-    final raAmpFinal =
-        (raAmp != null && raAmp >= _minArmSwingDeg) ? raAmp : null;
-    final laAmpFinal =
-        (laAmp != null && laAmp >= _minArmSwingDeg) ? laAmp : null;
+    final raAmpFinal = (raAmp != null && raAmp >= _minArmSwingDeg) ? raAmp : null;
+    final laAmpFinal = (laAmp != null && laAmp >= _minArmSwingDeg) ? laAmp : null;
 
     double? sym;
     if (raAmpFinal != null && laAmpFinal != null && laAmpFinal > 0) {
@@ -460,7 +517,7 @@ class GaitPipeline extends ChangeNotifier {
         raAmpFinal > 0 &&
         laAmpFinal > 0) {
       final greater = raAmpFinal >= laAmpFinal ? raAmpFinal : laAmpFinal;
-      final smaller = raAmpFinal < laAmpFinal ? raAmpFinal : laAmpFinal;
+      final smaller = raAmpFinal <  laAmpFinal ? raAmpFinal : laAmpFinal;
       asa = (45.0 - (atan(greater / smaller) * 180.0 / pi)) * 100.0 / 90.0;
     }
 
@@ -471,12 +528,11 @@ class GaitPipeline extends ChangeNotifier {
       regularity = mu > 0 ? GaitDsp.std(allAmps) / mu : null;
     }
 
-    final activeGyr = gyrZ.where((g) => g.abs() > 5).toList();
-    final velocityRms =
-        activeGyr.isNotEmpty ? GaitDsp.rms(activeGyr) : null;
+    final activeGyr  = gyrZ.where((g) => g.abs() > 5).toList();
+    final velocityRms = activeGyr.isNotEmpty ? GaitDsp.rms(activeGyr) : null;
 
-    final swVel = GaitDsp.rms([...accX, ...accY]);
-    var swPath = 0.0;
+    final swVel  = GaitDsp.rms([...accX, ...accY]);
+    var   swPath = 0.0;
     for (int i = 1; i < samples.length; i++) {
       final dAP = (accY[i] - accY[i - 1]).abs();
       final dML = (accX[i] - accX[i - 1]).abs();
@@ -485,17 +541,17 @@ class GaitPipeline extends ChangeNotifier {
     final swFreq = GaitDsp.dominantFreq(accY, fs);
 
     return _ArmSwingMetrics(
-      raAmp: raAmpFinal,
-      laAmp: laAmpFinal,
-      sym: sym,
-      asa: asa,
-      hasArmswing: hasArmswing,
-      swVel: swVel,
-      swPath: swPath,
-      swFreq: swFreq,
-      hasSway: 1.0,
+      raAmp:          raAmpFinal,
+      laAmp:          laAmpFinal,
+      sym:            sym,
+      asa:            asa,
+      hasArmswing:    hasArmswing,
+      swVel:          swVel,
+      swPath:         swPath,
+      swFreq:         swFreq,
+      hasSway:        1.0,
       velocityRmsDegS: velocityRms,
-      regularity: regularity,
+      regularity:     regularity,
     );
   }
 }

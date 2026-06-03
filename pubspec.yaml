@@ -34,6 +34,7 @@ dependencies:
 
   fl_chart: ^0.66.2
   provider: ^6.1.2
+  flutter_blue_plus: ^1.32.12
   sensors_plus: ^6.1.1
   google_fonts: ^8.1.0
   
@@ -64,6 +65,7 @@ flutter:
   assets:
     - assets/gait_classifier.ptl
     - assets/scaler_params.json
+    - assets/bradykinesia_gait_thresholds.json
 
 
   # To add assets to your application, add an assets section, like this:
