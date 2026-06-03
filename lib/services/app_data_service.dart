@@ -1,30 +1,30 @@
-// ============================================================
-// DATA SERVICE — Mock implementation
-//
-// HOW TO INTEGRATE WITH PROCESSING TEAM:
-// 1. Keep this file's public interface (method signatures) identical
-// 2. Replace the body of each method with real BLE / backend calls
-// 3. The UI will work without any changes
-//
-// SEARCH FOR: "// REPLACE WITH PROCESSING TEAM OUTPUT"
-// to find every point of integration.
-// ============================================================
-
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/patient_data.dart';
+import '../tremor_pipeline.dart';
+import '../gait_pipeline.dart';
+import '../ble_service.dart';
 
 class AppDataService extends ChangeNotifier {
-  // ----------------------------------------------------------
-  // Auth state
-  // ----------------------------------------------------------
-  String? _currentUserId;
-  bool _isClinicianMode = false;
+  final TremorPipeline tremorPipeline;
+  final GaitPipeline   gaitPipeline;
+  final BleService     bleService;
 
-  bool get isClinicianMode => _isClinicianMode;
-  String? get currentUserId => _currentUserId;
+  AppDataService({
+    required this.tremorPipeline,
+    required this.gaitPipeline,
+    required this.bleService,
+  }) {
+    _subscribeToUpdates();
+  }
+
+  String? _currentUserId;
+  bool    _isClinicianMode = false;
+  bool    get isClinicianMode => _isClinicianMode;
+  String? get currentUserId   => _currentUserId;
 
   void login({required String userId, required bool asClinicianMode}) {
-    _currentUserId = userId;
+    _currentUserId   = userId;
     _isClinicianMode = asClinicianMode;
     notifyListeners();
   }
@@ -34,383 +34,286 @@ class AppDataService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ----------------------------------------------------------
-  // Live device status
-  // REPLACE WITH PROCESSING TEAM OUTPUT: BLE stream
-  // ----------------------------------------------------------
-  DeviceStatus getDeviceStatus(String patientId) {
-    return const DeviceStatus(
-      isConnected: true,
-      batteryPercent: 72,
-      lastSyncTime: null, // will be DateTime.now() in live version
-      isWorn: true,
-    );
-  }
+  TremorResult?       _latestTremor;
+  GaitAnalysisResult? _latestGait;
+  final List<TremorResult>       _tremorHistory = [];
+  final List<GaitAnalysisResult> _gaitHistory   = [];
+  StreamSubscription? _tremorSub;
+  StreamSubscription? _gaitSub;
 
-  // ----------------------------------------------------------
-  // Latest symptom snapshot
-  // REPLACE WITH PROCESSING TEAM OUTPUT: real-time classifier output
-  // Expected output format: SymptomSnapshot with MDS-UPDRS scores 0.0–4.0
-  // ----------------------------------------------------------
-  SymptomSnapshot? getLatestSnapshot(String patientId) {
-    return SymptomSnapshot(
-      timestamp: DateTime.now().subtract(const Duration(minutes: 12)),
-      tremorScore: _mockTremor[patientId] ?? 1.2,
-      bradykinesiaScore: _mockBradykinesia[patientId] ?? 0.8,
-      dyskinesiaScore: _mockDyskinesia[patientId] ?? 0.3,
-      rigidityScore: 0.6,
-    );
-  }
-
-  // ----------------------------------------------------------
-  // 7-day symptom history
-  // REPLACE WITH PROCESSING TEAM OUTPUT: historical classifier results
-  // ----------------------------------------------------------
-  List<SymptomSnapshot> getWeeklySnapshots(String patientId) {
-    final now = DateTime.now();
-    return List.generate(7, (i) {
-      final base = _mockTremor[patientId] ?? 1.2;
-      return SymptomSnapshot(
-        timestamp: now.subtract(Duration(days: 6 - i)),
-        tremorScore: (base + _variation[i % _variation.length]).clamp(0, 4),
-        bradykinesiaScore: (0.8 + _variation2[i % _variation2.length]).clamp(0, 4),
-        dyskinesiaScore: (0.3 + _variation3[i % _variation3.length]).clamp(0, 4),
-        rigidityScore: 0.6,
-      );
+  void _subscribeToUpdates() {
+    _tremorSub = tremorPipeline.resultStream.listen((result) {
+      _latestTremor = result;
+      _tremorHistory.add(result);
+      if (_tremorHistory.length > 500) _tremorHistory.removeAt(0);
+      notifyListeners();
+    });
+    _gaitSub = gaitPipeline.resultStream.listen((result) {
+      _latestGait = result;
+      _gaitHistory.add(result);
+      if (_gaitHistory.length > 500) _gaitHistory.removeAt(0);
+      notifyListeners();
     });
   }
 
-  // ----------------------------------------------------------
-  // Gait metrics
-  // REPLACE WITH PROCESSING TEAM OUTPUT: gait analysis pipeline
-  // ----------------------------------------------------------
+  @override
+  void dispose() {
+    _tremorSub?.cancel();
+    _gaitSub?.cancel();
+    super.dispose();
+  }
+
+  DeviceStatus getDeviceStatus(String patientId) {
+    return DeviceStatus(
+      isConnected:    bleService.isActive,
+      batteryPercent: 0, // TODO: hardware team to add batteryPercent to BleService
+      lastSyncTime:   _latestTremor?.timestamp ?? _latestGait?.timestamp,
+      isWorn:         bleService.isActive,
+    );
+  }
+
+  SymptomSnapshot? getLatestSnapshot(String patientId) {
+    if (_latestTremor == null) return _mockSnapshot();
+    return SymptomSnapshot(
+      timestamp:         _latestTremor!.timestamp,
+      tremorScore:       _latestTremor!.tremorSeverity.toDouble(),
+      bradykinesiaScore: _bradykinesiaScore(),
+      dyskinesiaScore:   _latestTremor!.dyskinesiaSeverity.toDouble(),
+      rigidityScore:     0.0,
+    );
+  }
+
+  double _bradykinesiaScore() {
+    if (_latestGait != null) return _latestGait!.bradykinesiaSeverity.toDouble();
+    return gaitPipeline.latestResult?.bradykinesiaSeverity.toDouble() ?? 0.0;
+  }
+
+  List<SymptomSnapshot> getWeeklySnapshots(String patientId) {
+    if (_tremorHistory.isEmpty) return _mockWeeklySnapshots();
+    final now    = DateTime.now();
+    final result = <SymptomSnapshot>[];
+    for (int daysAgo = 6; daysAgo >= 0; daysAgo--) {
+      final day = DateTime(now.year, now.month, now.day).subtract(Duration(days: daysAgo));
+      final dayTremor = _tremorHistory.where((r) =>
+          r.timestamp.year == day.year &&
+          r.timestamp.month == day.month &&
+          r.timestamp.day == day.day).toList();
+      if (dayTremor.isNotEmpty) {
+        final last = dayTremor.last;
+        final g    = _closestGait(last.timestamp);
+        result.add(SymptomSnapshot(
+          timestamp:         last.timestamp,
+          tremorScore:       last.tremorSeverity.toDouble(),
+          bradykinesiaScore: g?.bradykinesiaSeverity.toDouble() ?? 0.0,
+          dyskinesiaScore:   last.dyskinesiaSeverity.toDouble(),
+          rigidityScore:     0.0,
+        ));
+      } else {
+        result.add(SymptomSnapshot(
+          timestamp:         day,
+          tremorScore:       _latestTremor?.tremorSeverity.toDouble() ?? 0.0,
+          bradykinesiaScore: _bradykinesiaScore(),
+          dyskinesiaScore:   _latestTremor?.dyskinesiaSeverity.toDouble() ?? 0.0,
+          rigidityScore:     0.0,
+        ));
+      }
+    }
+    return result;
+  }
+
+  GaitAnalysisResult? _closestGait(DateTime t) {
+    if (_gaitHistory.isEmpty) return null;
+    return _gaitHistory.reduce((a, b) =>
+        a.timestamp.difference(t).abs() < b.timestamp.difference(t).abs() ? a : b);
+  }
+
   GaitMetrics? getLatestGait(String patientId) {
+    final r = _latestGait ?? gaitPipeline.latestResult;
+    if (r == null) return null;
+    final cad   = r.cadenceStepsPerMin ?? 0.0;
+    final speed = r.walkingSpeedMs     ?? 0.0;
     return GaitMetrics(
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      strideLength: 0.58,
-      stepFrequency: 98,
-      armSwingScore: 1.4,
-      gaitSymmetry: 0.81,
-      walkingSpeed: 0.94,
-      stepCount: 4820,
+      timestamp:     r.timestamp,
+      strideLength:  cad > 0 ? speed * 60.0 / cad : 0.0,
+      stepFrequency: cad,
+      armSwingScore: r.bradykinesiaSeverity.toDouble(),
+      gaitSymmetry:  (r.features['SYM_U'] ?? 0.80).clamp(0.0, 1.0),
+      walkingSpeed:  speed,
+      stepCount:     r.validation.stepCount,
     );
   }
 
   List<GaitMetrics> getWeeklyGait(String patientId) {
+    if (_gaitHistory.isEmpty) return _mockWeeklyGait();
+    final now    = DateTime.now();
+    final result = <GaitMetrics>[];
+    for (int daysAgo = 6; daysAgo >= 0; daysAgo--) {
+      final day = DateTime(now.year, now.month, now.day).subtract(Duration(days: daysAgo));
+      final dayGait = _gaitHistory.where((r) =>
+          r.timestamp.year == day.year &&
+          r.timestamp.month == day.month &&
+          r.timestamp.day == day.day).toList();
+      if (dayGait.isNotEmpty) {
+        final last  = dayGait.last;
+        final cad   = last.cadenceStepsPerMin ?? 0.0;
+        final speed = last.walkingSpeedMs     ?? 0.0;
+        result.add(GaitMetrics(
+          timestamp:     last.timestamp,
+          strideLength:  cad > 0 ? speed * 60.0 / cad : 0.0,
+          stepFrequency: cad,
+          armSwingScore: last.bradykinesiaSeverity.toDouble(),
+          gaitSymmetry:  (last.features['SYM_U'] ?? 0.80).clamp(0.0, 1.0),
+          walkingSpeed:  speed,
+          stepCount:     last.validation.stepCount,
+        ));
+      } else {
+        result.add(GaitMetrics(
+          timestamp: day, strideLength: 0.58, stepFrequency: 98,
+          armSwingScore: 1.0, gaitSymmetry: 0.80, walkingSpeed: 0.90, stepCount: 0,
+        ));
+      }
+    }
+    return result;
+  }
+
+  List<MedicationResponsePoint> getMedicationResponse(String patientId) {
+    final meds = getMedications(patientId);
+    if (meds.isEmpty || _tremorHistory.length < 5) return _mockMedicationResponse();
+    final med    = meds.first;
+    final points = <MedicationResponsePoint>[];
+    for (final t in _tremorHistory.take(300)) {
+      final mins = _minutesSinceLastDose(t.timestamp, med.scheduledTimes);
+      if (mins == null) continue;
+      final g = _closestGait(t.timestamp);
+      points.add(MedicationResponsePoint(
+        timestamp: t.timestamp, minutesSinceDose: mins,
+        tremorScore: t.tremorSeverity.toDouble(),
+        bradykinesiaScore: g?.bradykinesiaSeverity.toDouble() ?? 0.0,
+        dyskinesiaScore: t.dyskinesiaSeverity.toDouble(),
+        medicationName: med.name,
+      ));
+    }
+    points.sort((a, b) => a.minutesSinceDose.compareTo(b.minutesSinceDose));
+    return points.isEmpty ? _mockMedicationResponse() : points;
+  }
+
+  double? _minutesSinceLastDose(DateTime t, List<String> times) {
+    DateTime? lastDose;
+    for (final ts in times) {
+      final parts = ts.split(':');
+      if (parts.length < 2) continue;
+      final dose = DateTime(t.year, t.month, t.day,
+          int.parse(parts[0]), int.parse(parts[1]));
+      if (dose.isBefore(t) && (lastDose == null || dose.isAfter(lastDose))) {
+        lastDose = dose;
+      }
+    }
+    return lastDose == null ? null : t.difference(lastDose).inMinutes.toDouble();
+  }
+
+  List<Patient> getPatients(String clinicianId) => _buildPatients();
+  Patient? getPatient(String patientId) =>
+      _buildPatients().firstWhere((p) => p.id == patientId,
+          orElse: () => _buildPatients().first);
+
+  List<Patient> _buildPatients() => [
+    Patient(
+      id: 'p001', name: 'Margaret Ellis', age: 68, diagnosisYear: '2019',
+      assignedClinicianId: 'c001',
+      deviceStatus:       getDeviceStatus('p001'),
+      medications:        _staticMedications,
+      weeklySnapshots:    getWeeklySnapshots('p001'),
+      weeklyGait:         getWeeklyGait('p001'),
+      medicationResponse: getMedicationResponse('p001'),
+      checkIns:           getCheckIns('p001'),
+      appointments:       _staticAppointments,
+      latestSnapshot:     getLatestSnapshot('p001'),
+      baselineSnapshot:   getBaseline('p001'),
+    ),
+  ];
+
+  SymptomSnapshot? getBaseline(String patientId) => SymptomSnapshot(
+    timestamp: DateTime(2025, 10, 15),
+    tremorScore: 0.8, bradykinesiaScore: 0.6,
+    dyskinesiaScore: 0.1, rigidityScore: 0.5,
+  );
+
+  final List<WellbeingCheckIn> _checkIns = [];
+  List<WellbeingCheckIn> getCheckIns(String patientId) => _checkIns;
+
+  void logCheckIn({
+    required String patientId, required int feelingScore,
+    String? notes, List<String> symptoms = const [],
+  }) {
+    _checkIns.insert(0, WellbeingCheckIn(
+      date: DateTime.now(), feelingScore: feelingScore,
+      notes: notes, symptoms: symptoms,
+    ));
+    notifyListeners();
+  }
+
+  List<MedicationEntry> getMedications(String patientId) => _staticMedications;
+  void logMedicationTaken(String patientId, String medicationId) => notifyListeners();
+  List<Appointment> getAppointments(String patientId) => _staticAppointments;
+
+  static final _staticMedications = [
+    MedicationEntry(id: 'm001', name: 'Levodopa / Carbidopa', dose: '100mg / 25mg',
+        scheduledTimes: ['07:30', '12:30', '17:30'], takenAt: [], color: '#1D9E75'),
+    MedicationEntry(id: 'm002', name: 'Pramipexole', dose: '0.5mg',
+        scheduledTimes: ['08:00', '20:00'], takenAt: [], color: '#185FA5'),
+  ];
+
+  static final _staticAppointments = [
+    Appointment(id: 'a001', dateTime: DateTime(2026, 6, 18, 10, 30),
+        clinicianName: 'Dr. Sarah Okonkwo',
+        location: 'Movement Disorders Clinic, Floor 3',
+        type: 'routine', discussionPoints: [
+          'Tremor slightly increased since last visit',
+          'Review Levodopa timing based on wrist data',
+          'Discuss recent sleep quality from check-ins',
+        ]),
+    Appointment(id: 'a002', dateTime: DateTime(2026, 8, 5, 14, 0),
+        clinicianName: 'Dr. Sarah Okonkwo', location: 'Phone consultation',
+        type: 'phone', discussionPoints: [
+          '3-month progress review', 'Medication adjustment follow-up',
+        ]),
+  ];
+
+  SymptomSnapshot _mockSnapshot() => SymptomSnapshot(
+    timestamp: DateTime.now(), tremorScore: 1.2,
+    bradykinesiaScore: 0.8, dyskinesiaScore: 0.3, rigidityScore: 0.6,
+  );
+
+  List<SymptomSnapshot> _mockWeeklySnapshots() {
+    final now = DateTime.now();
+    return List.generate(7, (i) => SymptomSnapshot(
+      timestamp: now.subtract(Duration(days: 6 - i)),
+      tremorScore: 1.2, bradykinesiaScore: 0.8,
+      dyskinesiaScore: 0.3, rigidityScore: 0.6,
+    ));
+  }
+
+  List<GaitMetrics> _mockWeeklyGait() {
     final now = DateTime.now();
     return List.generate(7, (i) => GaitMetrics(
       timestamp: now.subtract(Duration(days: 6 - i)),
-      strideLength: 0.55 + (i * 0.005),
-      stepFrequency: 96 + (i % 3) * 2.0,
-      armSwingScore: 1.4 + (i % 2) * 0.2,
-      gaitSymmetry: 0.79 + (i * 0.004),
-      walkingSpeed: 0.90 + (i * 0.01),
-      stepCount: 4200 + (i * 150),
+      strideLength: 0.58, stepFrequency: 98,
+      armSwingScore: 1.0, gaitSymmetry: 0.80,
+      walkingSpeed: 0.90, stepCount: 4200,
     ));
   }
 
-  // ----------------------------------------------------------
-  // Medication response correlation
-  // REPLACE WITH PROCESSING TEAM OUTPUT: dose-symptom correlation analysis
-  // This is the key clinical insight — symptom scores binned by
-  // minutes since last levodopa dose
-  // ----------------------------------------------------------
-  List<MedicationResponsePoint> getMedicationResponse(String patientId) {
-    // Simulates typical levodopa on/off cycle: good response 30–180 min post-dose
+  List<MedicationResponsePoint> _mockMedicationResponse() {
     final now = DateTime.now();
-    final points = <MedicationResponsePoint>[];
-    for (int min = 0; min <= 360; min += 15) {
-      double tremor;
-      double brady;
-      if (min < 30) {
-        tremor = 2.2 - (min / 30) * 0.8;
-        brady = 2.0 - (min / 30) * 0.7;
-      } else if (min <= 180) {
-        tremor = 1.0 + ((min - 30) / 150) * 0.3;
-        brady = 0.9 + ((min - 30) / 150) * 0.4;
-      } else {
-        tremor = 1.3 + ((min - 180) / 180) * 1.2;
-        brady = 1.3 + ((min - 180) / 180) * 1.0;
-      }
-      points.add(MedicationResponsePoint(
-        timestamp: now.subtract(Duration(minutes: 360 - min)),
-        minutesSinceDose: min.toDouble(),
-        tremorScore: tremor.clamp(0, 4),
-        bradykinesiaScore: brady.clamp(0, 4),
-        dyskinesiaScore: (0.2 + (min / 360) * 0.4).clamp(0, 4),
-        medicationName: 'Levodopa',
-      ));
-    }
-    return points;
+    return List.generate(25, (i) {
+      final min = i * 15.0;
+      return MedicationResponsePoint(
+        timestamp: now.subtract(Duration(minutes: (360 - min).toInt())),
+        minutesSinceDose: min,
+        tremorScore: min < 30 ? 2.0 : min < 180 ? 1.0 : 1.5,
+        bradykinesiaScore: min < 30 ? 1.8 : min < 180 ? 0.9 : 1.4,
+        dyskinesiaScore: 0.3, medicationName: 'Levodopa',
+      );
+    });
   }
-
-  // ----------------------------------------------------------
-  // Patient list (for clinician)
-  // REPLACE WITH PROCESSING TEAM OUTPUT: patient database / backend
-  // ----------------------------------------------------------
-  List<Patient> getPatients(String clinicianId) {
-    return _mockPatients;
-  }
-
-  Patient? getPatient(String patientId) {
-    try {
-      return _mockPatients.firstWhere((p) => p.id == patientId);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Wellbeing check-ins (patient self-report — stored locally)
-  // ----------------------------------------------------------
-  final List<WellbeingCheckIn> _checkIns = [];
-
-  List<WellbeingCheckIn> getCheckIns(String patientId) {
-    return _mockCheckIns;
-  }
-
-  void logCheckIn({
-    required String patientId,
-    required int feelingScore,
-    String? notes,
-    List<String> symptoms = const [],
-  }) {
-    _checkIns.add(WellbeingCheckIn(
-      date: DateTime.now(),
-      feelingScore: feelingScore,
-      notes: notes,
-      symptoms: symptoms,
-    ));
-    notifyListeners();
-  }
-
-  // ----------------------------------------------------------
-  // Medications
-  // ----------------------------------------------------------
-  List<MedicationEntry> getMedications(String patientId) {
-    return _mockMedications;
-  }
-
-  void logMedicationTaken(String patientId, String medicationId) {
-    // REPLACE WITH PROCESSING TEAM OUTPUT: log to backend / trigger dose tracking
-    notifyListeners();
-  }
-
-  // ----------------------------------------------------------
-  // Appointments
-  // ----------------------------------------------------------
-  List<Appointment> getAppointments(String patientId) {
-    return _mockAppointments;
-  }
-
-  // ----------------------------------------------------------
-  // Baseline snapshot
-  // REPLACE WITH PROCESSING TEAM OUTPUT: baseline established at onboarding
-  // ----------------------------------------------------------
-  SymptomSnapshot? getBaseline(String patientId) {
-    return SymptomSnapshot(
-      timestamp: DateTime(2025, 10, 15),
-      tremorScore: 0.8,
-      bradykinesiaScore: 0.6,
-      dyskinesiaScore: 0.1,
-      rigidityScore: 0.5,
-    );
-  }
-
-  // ----------------------------------------------------------
-  // Mock data — all values below will be replaced
-  // ----------------------------------------------------------
-  static const _mockTremor = {
-    'p001': 1.2, 'p002': 2.4, 'p003': 0.6, 'p004': 1.8,
-  };
-  static const _mockBradykinesia = {
-    'p001': 0.8, 'p002': 2.1, 'p003': 0.4, 'p004': 1.5,
-  };
-  static const _mockDyskinesia = {
-    'p001': 0.3, 'p002': 1.2, 'p003': 0.1, 'p004': 0.8,
-  };
-
-  static const _variation = [0.0, 0.3, -0.1, 0.5, 0.2, -0.2, 0.4];
-  static const _variation2 = [0.0, -0.2, 0.3, 0.1, -0.3, 0.4, 0.0];
-  static const _variation3 = [0.0, 0.1, 0.0, 0.2, -0.1, 0.1, 0.0];
-
-  static final _mockPatients = [
-    Patient(
-      id: 'p001',
-      name: 'Margaret Ellis',
-      age: 68,
-      diagnosisYear: '2019',
-      assignedClinicianId: 'c001',
-      deviceStatus: const DeviceStatus(
-        isConnected: true, batteryPercent: 72, isWorn: true),
-      medications: _mockMedications,
-      weeklySnapshots: [],
-      weeklyGait: [],
-      medicationResponse: [],
-      checkIns: _mockCheckIns,
-      appointments: _mockAppointments,
-      latestSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2026, 6, 1),
-        tremorScore: 1.2, bradykinesiaScore: 0.8,
-        dyskinesiaScore: 0.3, rigidityScore: 0.6),
-      baselineSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2025, 10, 15),
-        tremorScore: 0.8, bradykinesiaScore: 0.6,
-        dyskinesiaScore: 0.1, rigidityScore: 0.5),
-    ),
-    Patient(
-      id: 'p002',
-      name: 'Robert Chen',
-      age: 74,
-      diagnosisYear: '2016',
-      assignedClinicianId: 'c001',
-      deviceStatus: const DeviceStatus(
-        isConnected: true, batteryPercent: 31, isWorn: true),
-      medications: _mockMedications,
-      weeklySnapshots: [],
-      weeklyGait: [],
-      medicationResponse: [],
-      checkIns: [],
-      appointments: _mockAppointments,
-      latestSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2026, 6, 1),
-        tremorScore: 2.4, bradykinesiaScore: 2.1,
-        dyskinesiaScore: 1.2, rigidityScore: 1.8),
-      baselineSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2025, 9, 10),
-        tremorScore: 1.8, bradykinesiaScore: 1.6,
-        dyskinesiaScore: 0.6, rigidityScore: 1.2),
-    ),
-    Patient(
-      id: 'p003',
-      name: 'Patricia Okafor',
-      age: 61,
-      diagnosisYear: '2022',
-      assignedClinicianId: 'c001',
-      deviceStatus: const DeviceStatus(
-        isConnected: false, batteryPercent: 0, isWorn: false),
-      medications: _mockMedications,
-      weeklySnapshots: [],
-      weeklyGait: [],
-      medicationResponse: [],
-      checkIns: [],
-      appointments: _mockAppointments,
-      latestSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2026, 5, 29),
-        tremorScore: 0.6, bradykinesiaScore: 0.4,
-        dyskinesiaScore: 0.1, rigidityScore: 0.3),
-      baselineSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2025, 11, 20),
-        tremorScore: 0.5, bradykinesiaScore: 0.3,
-        dyskinesiaScore: 0.0, rigidityScore: 0.2),
-    ),
-    Patient(
-      id: 'p004',
-      name: 'David Whitmore',
-      age: 71,
-      diagnosisYear: '2018',
-      assignedClinicianId: 'c001',
-      deviceStatus: const DeviceStatus(
-        isConnected: true, batteryPercent: 88, isWorn: false),
-      medications: _mockMedications,
-      weeklySnapshots: [],
-      weeklyGait: [],
-      medicationResponse: [],
-      checkIns: [],
-      appointments: _mockAppointments,
-      latestSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2026, 6, 1),
-        tremorScore: 1.8, bradykinesiaScore: 1.5,
-        dyskinesiaScore: 0.8, rigidityScore: 1.1),
-      baselineSnapshot: SymptomSnapshot(
-        timestamp: DateTime(2025, 10, 5),
-        tremorScore: 1.4, bradykinesiaScore: 1.2,
-        dyskinesiaScore: 0.4, rigidityScore: 0.9),
-    ),
-  ];
-
-  static final _mockMedications = [
-    MedicationEntry(
-      id: 'm001',
-      name: 'Levodopa / Carbidopa',
-      dose: '100mg / 25mg',
-      scheduledTimes: ['07:30', '12:30', '17:30'],
-      takenAt: [],
-      color: '#1D9E75',
-    ),
-    MedicationEntry(
-      id: 'm002',
-      name: 'Pramipexole',
-      dose: '0.5mg',
-      scheduledTimes: ['08:00', '20:00'],
-      takenAt: [],
-      color: '#185FA5',
-    ),
-  ];
-
-  static final _mockAppointments = [
-    Appointment(
-      id: 'a001',
-      dateTime: DateTime(2026, 6, 18, 10, 30),
-      clinicianName: 'Dr. Sarah Okonkwo',
-      location: 'Movement Disorders Clinic, Floor 3',
-      type: 'routine',
-      discussionPoints: [
-        'Tremor slightly increased since last visit',
-        'Review Levodopa timing based on wrist data',
-        'Discuss recent sleep quality from check-ins',
-      ],
-    ),
-    Appointment(
-      id: 'a002',
-      dateTime: DateTime(2026, 8, 5, 14, 0),
-      clinicianName: 'Dr. Sarah Okonkwo',
-      location: 'Phone consultation',
-      type: 'phone',
-      discussionPoints: [
-        '3-month progress review',
-        'Medication adjustment follow-up',
-      ],
-    ),
-  ];
-
-  static final _mockCheckIns = [
-    WellbeingCheckIn(
-      date: DateTime.now().subtract(const Duration(days: 0)),
-      feelingScore: 2,
-      symptoms: ['fatigue'],
-      notes: 'A bit stiff this morning',
-    ),
-    WellbeingCheckIn(
-      date: DateTime.now().subtract(const Duration(days: 1)),
-      feelingScore: 3,
-      symptoms: [],
-    ),
-    WellbeingCheckIn(
-      date: DateTime.now().subtract(const Duration(days: 2)),
-      feelingScore: 2,
-      symptoms: ['tremor', 'stiffness'],
-    ),
-    WellbeingCheckIn(
-      date: DateTime.now().subtract(const Duration(days: 3)),
-      feelingScore: 3,
-      symptoms: [],
-    ),
-    WellbeingCheckIn(
-      date: DateTime.now().subtract(const Duration(days: 4)),
-      feelingScore: 1,
-      symptoms: ['fatigue', 'tremor'],
-      notes: 'Had a bad night',
-    ),
-    WellbeingCheckIn(
-      date: DateTime.now().subtract(const Duration(days: 5)),
-      feelingScore: 2,
-      symptoms: ['stiffness'],
-    ),
-    WellbeingCheckIn(
-      date: DateTime.now().subtract(const Duration(days: 6)),
-      feelingScore: 3,
-      symptoms: [],
-    ),
-  ];
 }

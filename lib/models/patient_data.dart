@@ -28,7 +28,7 @@ class SymptomSnapshot {
   final double dyskinesiaScore;  // 0.0–4.0
   final double rigidityScore;    // 0.0–4.0 (if available)
 
-  const SymptomSnapshot({
+   SymptomSnapshot({
     required this.timestamp,
     required this.tremorScore,
     required this.bradykinesiaScore,
@@ -64,7 +64,7 @@ class GaitMetrics {
   final double walkingSpeed;     // m/s
   final int stepCount;
 
-  const GaitMetrics({
+   GaitMetrics({
     required this.timestamp,
     required this.strideLength,
     required this.stepFrequency,

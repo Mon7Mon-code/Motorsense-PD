@@ -138,13 +138,15 @@ class DeviceStatusBar extends StatelessWidget {
             const SizedBox(
               height: 12, child: VerticalDivider(width: 1, thickness: 0.5)),
             const SizedBox(width: 10),
-            Icon(Icons.battery_std_rounded, size: 14, color: batteryColor),
+            Icon(Icons.battery_std_rounded, size: 14, color: AppTheme.neutral300),
             const SizedBox(width: 3),
-            Text('$batteryPercent%',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: batteryColor)),
+            Text(
+              batteryPercent > 0 ? '$batteryPercent%' : 'Battery unknown',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.neutral400),
+            ),
           ],
         ],
       ),

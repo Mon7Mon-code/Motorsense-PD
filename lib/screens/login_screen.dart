@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/app_data_service.dart';
 import '../theme/app_theme.dart';
 import 'patient/patient_shell.dart';
+import 'patient/patient_onboarding_screen.dart';
 import 'clinician/clinician_shell.dart';
 
 // ============================================================
@@ -51,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen>
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => asClinicianMode
             ? const ClinicianShell()
-            : const PatientShell(),
+            : PatientOnboardingScreen(),
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 300),
