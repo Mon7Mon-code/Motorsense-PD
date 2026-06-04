@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/app_data_service.dart';
 import '../../theme/app_theme.dart';
 
 // ============================================================
@@ -269,6 +270,217 @@ class ScoreBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// --- Sensor card state shell ---------------------------------
+/// Wraps any sensor-derived card. When [state] indicates no usable data the
+/// shell replaces [child] with an appropriate empty-state card; for stale /
+/// disconnected states it preserves [child] but prepends a status banner
+/// (and dims the card for the disconnected case).
+///
+/// Non-sensor cards (medications, check-ins, appointments) should NOT use
+/// this widget — they are always shown regardless of device state.
+class SensorCardShell extends StatelessWidget {
+  final SensorDataState state;
+  final Widget child;
+  final Duration? lastSyncAge;
+
+  const SensorCardShell({
+    super.key,
+    required this.state,
+    required this.child,
+    this.lastSyncAge,
+  });
+
+  bool get _hasLiveData =>
+      state == SensorDataState.live ||
+      state == SensorDataState.stale ||
+      state == SensorDataState.disconnected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_hasLiveData) return _emptyState();
+
+    if (state == SensorDataState.live) return child;
+
+    final banner = state == SensorDataState.stale
+        ? _StaleBanner(age: lastSyncAge)
+        : _DisconnectedBanner(age: lastSyncAge);
+
+    final content = state == SensorDataState.disconnected
+        ? Opacity(opacity: 0.6, child: child)
+        : child;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [banner, const SizedBox(height: 8), content],
+    );
+  }
+
+  Widget _emptyState() {
+    switch (state) {
+      case SensorDataState.noDevice:
+        return _SensorEmptyCard(
+          icon: Icons.watch_off_outlined,
+          title: 'Connect your wearable',
+          body: 'Pair your PD-Monitor device to start tracking movement.',
+          iconColor: AppTheme.neutral500,
+          bgColor: AppTheme.neutral50,
+          borderColor: AppTheme.neutral200,
+        );
+      case SensorDataState.connecting:
+        return _SensorConnectingCard();
+      case SensorDataState.collectingBaseline:
+        return _SensorEmptyCard(
+          icon: Icons.timeline_rounded,
+          title: 'Baseline in progress',
+          body: 'Symptom scores will appear once your 24-hour baseline is established.',
+          iconColor: AppTheme.teal600,
+          bgColor: AppTheme.teal50,
+          borderColor: AppTheme.teal100,
+        );
+      case SensorDataState.insufficientData:
+        return _SensorEmptyCard(
+          icon: Icons.cloud_off_rounded,
+          title: 'No recent movement data',
+          body: 'Reconnect your device to resume monitoring.',
+          iconColor: AppTheme.neutral500,
+          bgColor: AppTheme.neutral50,
+          borderColor: AppTheme.neutral200,
+        );
+      default:
+        return child;
+    }
+  }
+}
+
+class _StaleBanner extends StatelessWidget {
+  final Duration? age;
+  const _StaleBanner({this.age});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = age != null
+        ? 'Last updated ${age!.inMinutes}m ago'
+        : 'Last updated recently';
+    return Row(
+      children: [
+        const Icon(Icons.access_time_rounded, size: 13, color: AppTheme.amber600),
+        const SizedBox(width: 5),
+        Text(text,
+            style: const TextStyle(fontSize: 12, color: AppTheme.amber600)),
+      ],
+    );
+  }
+}
+
+class _DisconnectedBanner extends StatelessWidget {
+  final Duration? age;
+  const _DisconnectedBanner({this.age});
+
+  @override
+  Widget build(BuildContext context) {
+    String label = 'Device disconnected · showing last known readings';
+    if (age != null) {
+      final h = age!.inHours;
+      final m = age!.inMinutes % 60;
+      final ago = h > 0 ? '${h}h ${m}m ago' : '${m}m ago';
+      label = 'Device disconnected $ago · last known readings';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.amber50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.amber100, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.watch_off_outlined, size: 13, color: AppTheme.amber600),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(fontSize: 12, color: AppTheme.amber700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SensorEmptyCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+  final Color iconColor;
+  final Color bgColor;
+  final Color borderColor;
+
+  const _SensorEmptyCard({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.iconColor,
+    required this.bgColor,
+    required this.borderColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 0.5),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 28, color: iconColor),
+          const SizedBox(height: 10),
+          Text(title,
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: iconColor)),
+          const SizedBox(height: 4),
+          Text(body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 12, color: AppTheme.neutral500, height: 1.4)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SensorConnectingCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        color: AppTheme.neutral50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.neutral200, width: 0.5),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 16, height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2, color: AppTheme.teal600),
+          ),
+          SizedBox(width: 10),
+          Text('Connecting to device…',
+              style: TextStyle(fontSize: 13, color: AppTheme.neutral500)),
+        ],
+      ),
     );
   }
 }

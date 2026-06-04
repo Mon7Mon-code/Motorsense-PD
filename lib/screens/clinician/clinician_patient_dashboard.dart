@@ -119,7 +119,9 @@ class _OverviewTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final snapshot = patient.latestSnapshot;
     final baseline = patient.baselineSnapshot;
-    final device = patient.deviceStatus;
+    final device   = patient.deviceStatus;
+    final state    = svc.sensorDataState;
+    final syncAge  = svc.lastSyncAge;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
@@ -132,60 +134,70 @@ class _OverviewTab extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Current vs baseline grid
+        // Current vs baseline — only when both are real
+        const SectionHeader(title: 'Current vs baseline'),
         if (snapshot != null && baseline != null) ...[
-          const SectionHeader(title: 'Current vs baseline'),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 2.0,
-            children: [
-              _BaselineTile(
-                label: 'Tremor',
-                current: snapshot.tremorScore,
-                baseline: baseline.tremorScore,
-              ),
-              _BaselineTile(
-                label: 'Bradykinesia',
-                current: snapshot.bradykinesiaScore,
-                baseline: baseline.bradykinesiaScore,
-              ),
-              _BaselineTile(
-                label: 'Dyskinesia',
-                current: snapshot.dyskinesiaScore,
-                baseline: baseline.dyskinesiaScore,
-              ),
-              _BaselineTile(
-                label: 'Rigidity',
-                current: snapshot.rigidityScore,
-                baseline: baseline.rigidityScore,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
-
-        // Scores bars — numerical for clinician
-        if (snapshot != null) ...[
-          const SectionHeader(title: 'Current symptom scores (MDS-UPDRS)'),
-          AppCard(
-            child: Column(
+          SensorCardShell(
+            state: state,
+            lastSyncAge: syncAge,
+            child: GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.0,
               children: [
-                ScoreBar(label: 'Tremor', score: snapshot.tremorScore, showLabel: false),
-                const SizedBox(height: 12),
-                ScoreBar(label: 'Bradykinesia', score: snapshot.bradykinesiaScore, showLabel: false),
-                const SizedBox(height: 12),
-                ScoreBar(label: 'Dyskinesia', score: snapshot.dyskinesiaScore, showLabel: false),
-                const SizedBox(height: 12),
-                ScoreBar(label: 'Rigidity', score: snapshot.rigidityScore, showLabel: false),
+                _BaselineTile(label: 'Tremor',
+                    current: snapshot.tremorScore, baseline: baseline.tremorScore),
+                _BaselineTile(label: 'Bradykinesia',
+                    current: snapshot.bradykinesiaScore, baseline: baseline.bradykinesiaScore),
+                _BaselineTile(label: 'Dyskinesia',
+                    current: snapshot.dyskinesiaScore, baseline: baseline.dyskinesiaScore),
+                _BaselineTile(label: 'Rigidity',
+                    current: snapshot.rigidityScore, baseline: baseline.rigidityScore),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+        ] else if (!svc.isBaselineComplete) ...[
+          _ClinicalInfoCard(
+            icon: Icons.timeline_rounded,
+            message: 'Baseline collection in progress — comparison will be available after the 24-hour window.',
+            color: AppTheme.teal600,
+            bgColor: AppTheme.teal50,
+            borderColor: AppTheme.teal100,
+          ),
+        ] else ...[
+          SensorCardShell(
+            state: state,
+            lastSyncAge: syncAge,
+            child: const SizedBox.shrink(),
+          ),
         ],
+        const SizedBox(height: 16),
+
+        // Current symptom scores — sensor-derived, gated
+        const SectionHeader(title: 'Current symptom scores (MDS-UPDRS)'),
+        SensorCardShell(
+          state: state,
+          lastSyncAge: syncAge,
+          child: snapshot != null
+              ? AppCard(
+                  child: Column(
+                    children: [
+                      ScoreBar(label: 'Tremor', score: snapshot.tremorScore, showLabel: false),
+                      const SizedBox(height: 12),
+                      ScoreBar(label: 'Bradykinesia', score: snapshot.bradykinesiaScore, showLabel: false),
+                      const SizedBox(height: 12),
+                      ScoreBar(label: 'Dyskinesia', score: snapshot.dyskinesiaScore, showLabel: false),
+                      const SizedBox(height: 12),
+                      ScoreBar(label: 'Rigidity', score: snapshot.rigidityScore, showLabel: false),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        const SizedBox(height: 16),
 
         // Last patient check-in
         const SectionHeader(title: 'Patient self-report'),
@@ -342,10 +354,33 @@ class _SymptomsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final snapshots = svc.getWeeklySnapshots(patient.id);
+    final state     = svc.sensorDataState;
+    final syncAge   = svc.lastSyncAge;
+
+    if (snapshots.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: SensorCardShell(
+          state: state,
+          lastSyncAge: syncAge,
+          child: const SizedBox.shrink(),
+        ),
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
       children: [
+        // Stale/disconnected banner sits above the charts, not per-chart.
+        if (state == SensorDataState.stale || state == SensorDataState.disconnected)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SensorCardShell(
+              state: state,
+              lastSyncAge: syncAge,
+              child: const SizedBox.shrink(),
+            ),
+          ),
         const SectionHeader(title: '7-day tremor score'),
         AppCard(
           child: _ClinicalLineChart(
@@ -835,11 +870,18 @@ class _GaitTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gait = svc.getLatestGait(patient.id);
+    final gait       = svc.getLatestGait(patient.id);
     final weeklyGait = svc.getWeeklyGait(patient.id);
 
     if (gait == null) {
-      return const Center(child: Text('No gait data available.'));
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: SensorCardShell(
+          state: svc.sensorDataState,
+          lastSyncAge: svc.lastSyncAge,
+          child: const SizedBox.shrink(),
+        ),
+      );
     }
 
     return ListView(
@@ -912,58 +954,57 @@ class _GaitTab extends StatelessWidget {
         const SizedBox(height: 16),
 
         // 7-day walking speed trend
-        const SectionHeader(title: '7-day walking speed'),
-        AppCard(
-          child: Column(
-            children: [
-              SizedBox(
-                height: 140,
-                child: _GaitTrendChart(
-                  weeklyGait: weeklyGait,
-                  getValue: (g) => g.walkingSpeed,
-                  color: AppTheme.teal500,
+        if (weeklyGait.isNotEmpty) ...[
+          const SectionHeader(title: '7-day walking speed'),
+          AppCard(
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 140,
+                  child: _GaitTrendChart(
+                    weeklyGait: weeklyGait,
+                    getValue: (g) => g.walkingSpeed,
+                    color: AppTheme.teal500,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: weeklyGait.map((g) => Text(
-                  '${g.timestamp.day}/${g.timestamp.month}',
-                  style: const TextStyle(
-                      fontSize: 10, color: AppTheme.neutral400),
-                )).toList(),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // 7-day symmetry trend
-        const SectionHeader(title: '7-day gait symmetry'),
-        AppCard(
-          child: Column(
-            children: [
-              SizedBox(
-                height: 140,
-                child: _GaitTrendChart(
-                  weeklyGait: weeklyGait,
-                  getValue: (g) => g.gaitSymmetry * 4,
-                  color: AppTheme.blue400,
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: weeklyGait.map((g) => Text(
+                    '${g.timestamp.day}/${g.timestamp.month}',
+                    style: const TextStyle(
+                        fontSize: 10, color: AppTheme.neutral400),
+                  )).toList(),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: weeklyGait.map((g) => Text(
-                  '${g.timestamp.day}/${g.timestamp.month}',
-                  style: const TextStyle(
-                      fontSize: 10, color: AppTheme.neutral400),
-                )).toList(),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          const SizedBox(height: 16),
+          const SectionHeader(title: '7-day gait symmetry'),
+          AppCard(
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 140,
+                  child: _GaitTrendChart(
+                    weeklyGait: weeklyGait,
+                    getValue: (g) => g.gaitSymmetry * 4,
+                    color: AppTheme.blue400,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: weeklyGait.map((g) => Text(
+                    '${g.timestamp.day}/${g.timestamp.month}',
+                    style: const TextStyle(
+                        fontSize: 10, color: AppTheme.neutral400),
+                  )).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1123,6 +1164,47 @@ class _ReportIncludesRow extends StatelessWidget {
         const Icon(Icons.check_rounded,
             size: 16, color: AppTheme.teal400),
       ],
+    );
+  }
+}
+
+// Reusable info banner for clinician empty states (baseline / insufficient data).
+class _ClinicalInfoCard extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  final Color color;
+  final Color bgColor;
+  final Color borderColor;
+
+  const _ClinicalInfoCard({
+    required this.icon,
+    required this.message,
+    required this.color,
+    required this.bgColor,
+    required this.borderColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 0.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message,
+                style: TextStyle(fontSize: 13, color: color, height: 1.4)),
+          ),
+        ],
+      ),
     );
   }
 }

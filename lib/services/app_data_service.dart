@@ -6,6 +6,18 @@ import '../gait_pipeline.dart';
 import '../ble_service.dart';
 import 'local_storage_service.dart';
 
+/// Which data-quality state a sensor-derived card should display.
+/// Ordered from "best" to "worst" — callers may compare with >=.
+enum SensorDataState {
+  live,               // real data < 5 min old, device connected
+  stale,              // real data 5–30 min old
+  disconnected,       // real data 30 min–2 h old, device not connected
+  collectingBaseline, // within the 24 h post-onboarding baseline window
+  connecting,         // BLE scan / connect in progress
+  insufficientData,   // real data > 2 h old, or baseline window passed with no data
+  noDevice,           // onboarding never completed / device never set up
+}
+
 class AppDataService extends ChangeNotifier {
   final TremorPipeline        tremorPipeline;
   final GaitPipeline          gaitPipeline;
@@ -36,9 +48,36 @@ class AppDataService extends ChangeNotifier {
   // --- Session -----------------------------------------------
   String? _currentUserId;
   bool    _isClinicianMode = false;
-  bool    get isClinicianMode     => _isClinicianMode;
-  String? get currentUserId       => _currentUserId;
+  bool    get isClinicianMode      => _isClinicianMode;
+  String? get currentUserId        => _currentUserId;
   bool    get isOnboardingComplete => _storage.isOnboardingComplete;
+  bool    get hasRealSensorData    => _latestTremor != null;
+
+  /// How long ago the last real sensor reading arrived. Null if never.
+  Duration? get lastSyncAge => _latestTremor == null
+      ? null
+      : DateTime.now().difference(_latestTremor!.timestamp);
+
+  SensorDataState get sensorDataState {
+    final ble = bleService.status;
+    if (ble == BleStatus.scanning || ble == BleStatus.connecting) {
+      return SensorDataState.connecting;
+    }
+    if (_storage.onboardingTimestamp == null) {
+      return SensorDataState.noDevice;
+    }
+    if (!isBaselineComplete) {
+      return SensorDataState.collectingBaseline;
+    }
+    if (_latestTremor == null) {
+      return SensorDataState.insufficientData;
+    }
+    final age = DateTime.now().difference(_latestTremor!.timestamp);
+    if (age.inMinutes < 5)   return SensorDataState.live;
+    if (age.inMinutes < 30)  return SensorDataState.stale;
+    if (age.inMinutes < 120) return SensorDataState.disconnected;
+    return SensorDataState.insufficientData;
+  }
 
   void login({required String userId, required bool asClinicianMode}) {
     _currentUserId   = userId;
@@ -109,7 +148,7 @@ class AppDataService extends ChangeNotifier {
 
   // --- Symptom snapshots -------------------------------------
   SymptomSnapshot? getLatestSnapshot(String patientId) {
-    if (_latestTremor == null) return _mockSnapshot();
+    if (_latestTremor == null) return null;
     return SymptomSnapshot(
       timestamp:         _latestTremor!.timestamp,
       tremorScore:       _latestTremor!.tremorSeverity.toDouble(),
@@ -125,7 +164,7 @@ class AppDataService extends ChangeNotifier {
   }
 
   List<SymptomSnapshot> getWeeklySnapshots(String patientId) {
-    if (_tremorHistory.isEmpty) return _mockWeeklySnapshots();
+    if (_tremorHistory.isEmpty) return [];
     final now    = DateTime.now();
     final result = <SymptomSnapshot>[];
     for (int daysAgo = 6; daysAgo >= 0; daysAgo--) {
@@ -180,7 +219,7 @@ class AppDataService extends ChangeNotifier {
   }
 
   List<GaitMetrics> getWeeklyGait(String patientId) {
-    if (_gaitHistory.isEmpty) return _mockWeeklyGait();
+    if (_gaitHistory.isEmpty) return [];
     final now    = DateTime.now();
     final result = <GaitMetrics>[];
     for (int daysAgo = 6; daysAgo >= 0; daysAgo--) {
@@ -215,7 +254,7 @@ class AppDataService extends ChangeNotifier {
   // --- Medication response -----------------------------------
   List<MedicationResponsePoint> getMedicationResponse(String patientId) {
     final meds = getMedications(patientId);
-    if (meds.isEmpty || _tremorHistory.length < 5) return _mockMedicationResponse();
+    if (meds.isEmpty || _tremorHistory.length < 5) return [];
     final med    = meds.first;
     final points = <MedicationResponsePoint>[];
     for (final t in _tremorHistory.take(300)) {
@@ -231,7 +270,7 @@ class AppDataService extends ChangeNotifier {
       ));
     }
     points.sort((a, b) => a.minutesSinceDose.compareTo(b.minutesSinceDose));
-    return points.isEmpty ? _mockMedicationResponse() : points;
+    return points;
   }
 
   double? _minutesSinceLastDose(DateTime t, List<String> times) {
@@ -294,11 +333,18 @@ class AppDataService extends ChangeNotifier {
     return remaining.isNegative ? Duration.zero : remaining;
   }
 
-  SymptomSnapshot? getBaseline(String patientId) => SymptomSnapshot(
-    timestamp: DateTime(2025, 10, 15),
-    tremorScore: 0.8, bradykinesiaScore: 0.6,
-    dyskinesiaScore: 0.1, rigidityScore: 0.5,
-  );
+  /// Returns null until the 24 h baseline window is complete.
+  /// The processing team will replace the body with a real computed value;
+  /// the null-until-complete contract must be preserved.
+  SymptomSnapshot? getBaseline(String patientId) {
+    if (!isBaselineComplete) return null;
+    // TODO: replace with real computed baseline from processing team.
+    return SymptomSnapshot(
+      timestamp: _storage.onboardingTimestamp ?? DateTime.now(),
+      tremorScore: 0.8, bradykinesiaScore: 0.6,
+      dyskinesiaScore: 0.1, rigidityScore: 0.5,
+    );
+  }
 
   // --- Check-ins (persisted) ---------------------------------
   final List<WellbeingCheckIn> _checkIns = [];
@@ -362,44 +408,6 @@ class AppDataService extends ChangeNotifier {
         ]),
   ];
 
-  // --- Mock fallbacks (used when no sensor data yet) ---------
-  SymptomSnapshot _mockSnapshot() => SymptomSnapshot(
-    timestamp: DateTime.now(), tremorScore: 1.2,
-    bradykinesiaScore: 0.8, dyskinesiaScore: 0.3, rigidityScore: 0.6,
-  );
-
-  List<SymptomSnapshot> _mockWeeklySnapshots() {
-    final now = DateTime.now();
-    return List.generate(7, (i) => SymptomSnapshot(
-      timestamp: now.subtract(Duration(days: 6 - i)),
-      tremorScore: 1.2, bradykinesiaScore: 0.8,
-      dyskinesiaScore: 0.3, rigidityScore: 0.6,
-    ));
-  }
-
-  List<GaitMetrics> _mockWeeklyGait() {
-    final now = DateTime.now();
-    return List.generate(7, (i) => GaitMetrics(
-      timestamp: now.subtract(Duration(days: 6 - i)),
-      strideLength: 0.58, stepFrequency: 98,
-      armSwingScore: 1.0, gaitSymmetry: 0.80,
-      walkingSpeed: 0.90, stepCount: 4200,
-    ));
-  }
-
-  List<MedicationResponsePoint> _mockMedicationResponse() {
-    final now = DateTime.now();
-    return List.generate(25, (i) {
-      final min = i * 15.0;
-      return MedicationResponsePoint(
-        timestamp: now.subtract(Duration(minutes: (360 - min).toInt())),
-        minutesSinceDose: min,
-        tremorScore: min < 30 ? 2.0 : min < 180 ? 1.0 : 1.5,
-        bradykinesiaScore: min < 30 ? 1.8 : min < 180 ? 0.9 : 1.4,
-        dyskinesiaScore: 0.3, medicationName: 'Levodopa',
-      );
-    });
-  }
 }
 
 // Simple data holder for the medication seed list.

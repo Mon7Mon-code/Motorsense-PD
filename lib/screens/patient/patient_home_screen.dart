@@ -92,45 +92,55 @@ class PatientHomeScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // Wellness card — the hero element
-                if (snapshot != null) _WellnessCard(snapshot: snapshot),
+                // Wellness card — sensor-derived, gated by SensorCardShell
+                SensorCardShell(
+                  state: svc.sensorDataState,
+                  lastSyncAge: svc.lastSyncAge,
+                  child: snapshot != null
+                      ? _WellnessCard(snapshot: snapshot)
+                      : const SizedBox.shrink(),
+                ),
 
                 const SizedBox(height: 16),
 
-                // Next medication reminder
+                // Next medication reminder — always shown (user-entered data)
                 _NextDoseCard(svc: svc, patientId: patientId),
 
                 const SizedBox(height: 16),
 
-                // Today's check-in prompt (if not done today)
+                // Today's check-in prompt — always shown (user-entered data)
                 _CheckInPromptCard(checkIns: checkIns),
 
                 const SizedBox(height: 24),
 
-                // Today's symptoms — plain language
+                // Today's symptoms — sensor-derived, gated
                 const SectionHeader(title: 'How you\'re moving today'),
-
-                if (snapshot != null)
-                  AppCard(
-                    child: Column(
-                      children: [
-                        ScoreBar(
-                            label: 'Tremor',
-                            score: snapshot.tremorScore,
-                            showLabel: true),
-                        const SizedBox(height: 14),
-                        ScoreBar(
-                            label: 'Slowness of movement',
-                            score: snapshot.bradykinesiaScore,
-                            showLabel: true),
-                        const SizedBox(height: 14),
-                        ScoreBar(
-                            label: 'Involuntary movements',
-                            score: snapshot.dyskinesiaScore,
-                            showLabel: true),
-                      ],
-                    ),
-                  ),
+                SensorCardShell(
+                  state: svc.sensorDataState,
+                  lastSyncAge: svc.lastSyncAge,
+                  child: snapshot != null
+                      ? AppCard(
+                          child: Column(
+                            children: [
+                              ScoreBar(
+                                  label: 'Tremor',
+                                  score: snapshot.tremorScore,
+                                  showLabel: true),
+                              const SizedBox(height: 14),
+                              ScoreBar(
+                                  label: 'Slowness of movement',
+                                  score: snapshot.bradykinesiaScore,
+                                  showLabel: true),
+                              const SizedBox(height: 14),
+                              ScoreBar(
+                                  label: 'Involuntary movements',
+                                  score: snapshot.dyskinesiaScore,
+                                  showLabel: true),
+                            ],
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
 
                 const SizedBox(height: 24),
 
