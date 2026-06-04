@@ -239,22 +239,23 @@ class _WellnessCard extends StatelessWidget {
             width: 64,
             height: 64,
             child: Stack(
+              alignment: Alignment.center,
               children: [
-                CircularProgressIndicator(
-                  value: snapshot.overallWellness,
-                  strokeWidth: 5,
-                  backgroundColor: _accentColor.withOpacity(0.12),
-                  valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
-                  strokeCap: StrokeCap.round,
-                ),
-                Center(
-                  child: Text(
-                    '${(snapshot.overallWellness * 100).round()}',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: _accentColor),
+                Positioned.fill(
+                  child: CircularProgressIndicator(
+                    value: snapshot.overallWellness,
+                    strokeWidth: 5,
+                    backgroundColor: _accentColor.withOpacity(0.12),
+                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                    strokeCap: StrokeCap.round,
                   ),
+                ),
+                Text(
+                  '${(snapshot.overallWellness * 100).round()}',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: _accentColor),
                 ),
               ],
             ),
