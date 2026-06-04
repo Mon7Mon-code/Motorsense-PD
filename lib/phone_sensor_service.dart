@@ -104,7 +104,7 @@ class PhoneSensorService extends ChangeNotifier {
     _setStatus(PhoneSensorStatus.simulating);
     _simT = 0;
 
-    const rateHz = SensorConfig.xiaoLsm6ds3OdrHz;
+    const rateHz = SensorConfig.bleCsvOdrHz;
     final intervalMs = (1000 / rateHz).round();
 
     _simTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) {

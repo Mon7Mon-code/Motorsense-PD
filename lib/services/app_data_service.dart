@@ -112,6 +112,7 @@ class AppDataService extends ChangeNotifier {
   final List<GaitAnalysisResult> _gaitHistory   = [];
   StreamSubscription? _tremorSub;
   StreamSubscription? _gaitSub;
+  Timer?              _stalenessTimer;
 
   void _subscribeToUpdates() {
     _tremorSub = tremorPipeline.resultStream.listen((result) {
@@ -126,6 +127,11 @@ class AppDataService extends ChangeNotifier {
       if (_gaitHistory.length > 500) _gaitHistory.removeAt(0);
       notifyListeners();
     });
+    // Periodic tick so stale/disconnected banners age correctly even when
+    // no new sensor data is arriving (device lost connection silently, etc.).
+    _stalenessTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (_latestTremor != null) notifyListeners();
+    });
   }
 
   @override
@@ -133,6 +139,7 @@ class AppDataService extends ChangeNotifier {
     bleService.removeListener(notifyListeners);
     _tremorSub?.cancel();
     _gaitSub?.cancel();
+    _stalenessTimer?.cancel();
     super.dispose();
   }
 
