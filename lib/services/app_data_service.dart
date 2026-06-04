@@ -12,7 +12,8 @@ enum SensorDataState {
   live,               // real data < 5 min old, device connected
   stale,              // real data 5–30 min old
   disconnected,       // real data 30 min–2 h old, device not connected
-  collectingBaseline, // within the 24 h post-onboarding baseline window
+  collectingBaseline, // device connected + streaming during the baseline window
+  baselinePaused,     // baseline window open but device not connected / not streaming
   connecting,         // BLE scan / connect in progress
   insufficientData,   // real data > 2 h old, or baseline window passed with no data
   noDevice,           // onboarding never completed / device never set up
@@ -38,6 +39,7 @@ class AppDataService extends ChangeNotifier {
   Future<void> init() async {
     _checkIns.addAll(_storage.loadCheckIns());
     _medTakenAt.addAll(_storage.loadMedTaken());
+    _accumulatedBaselineSeconds = _storage.baselineElapsedSeconds;
 
     if (_storage.savedUserId != null) {
       _currentUserId   = _storage.savedUserId;
@@ -67,7 +69,10 @@ class AppDataService extends ChangeNotifier {
       return SensorDataState.noDevice;
     }
     if (!isBaselineComplete) {
-      return SensorDataState.collectingBaseline;
+      // Only "collecting" when device is actually connected and data is flowing.
+      return (bleService.isActive && _latestTremor != null)
+          ? SensorDataState.collectingBaseline
+          : SensorDataState.baselinePaused;
     }
     if (_latestTremor == null) {
       return SensorDataState.insufficientData;
@@ -105,6 +110,11 @@ class AppDataService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Baseline wear-time accumulator -----------------------
+  // Persisted via LocalStorageService. Only incremented while the wearable
+  // is actively connected AND delivering sensor data.
+  int _accumulatedBaselineSeconds = 0;
+
   // --- Pipeline subscriptions --------------------------------
   TremorResult?       _latestTremor;
   GaitAnalysisResult? _latestGait;
@@ -127,9 +137,9 @@ class AppDataService extends ChangeNotifier {
       if (_gaitHistory.length > 500) _gaitHistory.removeAt(0);
       notifyListeners();
     });
-    // Periodic tick so stale/disconnected banners age correctly even when
-    // no new sensor data is arriving (device lost connection silently, etc.).
+    // Every minute: age stale banners + accumulate baseline wear-time.
     _stalenessTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _accumulateBaselineTime();
       if (_latestTremor != null) notifyListeners();
     });
   }
@@ -323,21 +333,33 @@ class AppDataService extends ChangeNotifier {
 
   DateTime? get _onboardingTimestamp => _storage.onboardingTimestamp;
 
+  /// Progress is based on accumulated seconds the wearable was actively
+  /// connected and streaming — not wall-clock time.
   double get baselineProgress {
-    final ts = _onboardingTimestamp;
-    if (ts == null) return 0.0;
-    final elapsed = DateTime.now().difference(ts);
-    return (elapsed.inSeconds / _baselineDuration.inSeconds).clamp(0.0, 1.0);
+    if (_onboardingTimestamp == null) return 0.0;
+    return (_accumulatedBaselineSeconds / _baselineDuration.inSeconds)
+        .clamp(0.0, 1.0);
   }
 
-  bool get isBaselineComplete => baselineProgress >= 1.0;
+  bool get isBaselineComplete =>
+      _accumulatedBaselineSeconds >= _baselineDuration.inSeconds;
 
   Duration get baselineTimeRemaining {
-    final ts = _onboardingTimestamp;
-    if (ts == null) return _baselineDuration;
-    final elapsed = DateTime.now().difference(ts);
-    final remaining = _baselineDuration - elapsed;
-    return remaining.isNegative ? Duration.zero : remaining;
+    if (_onboardingTimestamp == null) return _baselineDuration;
+    final remainingSeconds =
+        _baselineDuration.inSeconds - _accumulatedBaselineSeconds;
+    return remainingSeconds <= 0
+        ? Duration.zero
+        : Duration(seconds: remainingSeconds);
+  }
+
+  void _accumulateBaselineTime() {
+    if (_onboardingTimestamp == null) return;
+    if (isBaselineComplete) return;
+    if (!bleService.isActive || _latestTremor == null) return;
+    _accumulatedBaselineSeconds =
+        (_accumulatedBaselineSeconds + 60).clamp(0, _baselineDuration.inSeconds);
+    unawaited(_storage.saveBaselineElapsed(_accumulatedBaselineSeconds));
   }
 
   /// Returns null until the 24 h baseline window is complete.

@@ -351,6 +351,15 @@ class SensorCardShell extends StatelessWidget {
           bgColor: AppTheme.teal50,
           borderColor: AppTheme.teal100,
         );
+      case SensorDataState.baselinePaused:
+        return _SensorEmptyCard(
+          icon: Icons.pause_circle_outline_rounded,
+          title: 'Baseline collection paused',
+          body: 'Connect your device to resume. Your progress so far is saved.',
+          iconColor: AppTheme.neutral500,
+          bgColor: Colors.white,
+          borderColor: AppTheme.neutral200,
+        );
       case SensorDataState.insufficientData:
         return _SensorEmptyCard(
           icon: Icons.sensors_off_rounded,

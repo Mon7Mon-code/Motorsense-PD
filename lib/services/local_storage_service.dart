@@ -9,7 +9,8 @@ class LocalStorageService {
   static const _keyPatientName  = 'patient_name';
   static const _keyDiagYear     = 'patient_diagnosis_year';
   static const _keyAffectedSide = 'patient_affected_side';
-  static const _keyOnboardingTimestamp = 'onboarding_timestamp';
+  static const _keyOnboardingTimestamp    = 'onboarding_timestamp';
+  static const _keyBaselineElapsedSeconds = 'baseline_elapsed_seconds';
   static const _keyCheckIns     = 'check_ins_p001';
   static const _keyMedTaken     = 'med_taken_p001';
 
@@ -43,6 +44,13 @@ class LocalStorageService {
   DateTime? get onboardingTimestamp {
     final s = _prefs.getString(_keyOnboardingTimestamp);
     return s == null ? null : DateTime.tryParse(s);
+  }
+
+  int get baselineElapsedSeconds =>
+      _prefs.getInt(_keyBaselineElapsedSeconds) ?? 0;
+
+  Future<void> saveBaselineElapsed(int seconds) async {
+    await _prefs.setInt(_keyBaselineElapsedSeconds, seconds);
   }
 
   Future<void> saveOnboardingProfile({

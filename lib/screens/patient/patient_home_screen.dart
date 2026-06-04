@@ -15,10 +15,11 @@ class PatientHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final svc = Provider.of<AppDataService>(context);
     const patientId = 'p001';
-    final patient = svc.getPatient(patientId);
+    final patient  = svc.getPatient(patientId);
     final snapshot = svc.getLatestSnapshot(patientId);
-    final device = svc.getDeviceStatus(patientId);
+    final device   = svc.getDeviceStatus(patientId);
     final checkIns = svc.getCheckIns(patientId);
+    final state    = svc.sensorDataState;
     final now = DateTime.now();
     final hour = now.hour;
     final greeting = hour < 12
@@ -87,13 +88,16 @@ class PatientHomeScreen extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // Baseline progress card — visible only during first 24h
-                if (!svc.isBaselineComplete) ...[
+                // Baseline progress card — visible during the baseline window
+                // (both collecting and paused states)
+                if (state == SensorDataState.collectingBaseline ||
+                    state == SensorDataState.baselinePaused) ...[
                   _BaselineProgressCard(svc: svc),
                   const SizedBox(height: 16),
                 ],
 
-                // Wellness card — sensor-derived, gated by SensorCardShell
+                // Today's readings — sensor-derived section
+                const SectionHeader(title: 'Today\'s readings'),
                 SensorCardShell(
                   state: svc.sensorDataState,
                   lastSyncAge: svc.lastSyncAge,
@@ -473,34 +477,46 @@ class _BaselineProgressCardState extends State<_BaselineProgressCard> {
   Widget build(BuildContext context) {
     if (_dismissed) return const SizedBox.shrink();
     final progress = widget.svc.baselineProgress;
+    final paused   = widget.svc.sensorDataState == SensorDataState.baselinePaused;
+
+    final cardColor   = paused ? AppTheme.neutral50  : AppTheme.teal50;
+    final borderColor = paused ? AppTheme.neutral200  : AppTheme.teal100;
+    final iconColor   = paused ? AppTheme.neutral400  : AppTheme.teal600;
+    final labelColor  = paused ? AppTheme.neutral600  : AppTheme.teal700;
+    final barColor    = paused ? AppTheme.neutral300  : AppTheme.teal500;
+    final barBg       = paused ? AppTheme.neutral200  : AppTheme.teal100;
+    final subColor    = paused ? AppTheme.neutral400  : AppTheme.teal600;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.teal50,
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.teal100, width: 0.5),
+        border: Border.all(color: borderColor, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.timeline_rounded,
-                  color: AppTheme.teal600, size: 18),
+              Icon(
+                paused ? Icons.pause_circle_outline_rounded : Icons.timeline_rounded,
+                color: iconColor,
+                size: 18,
+              ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Establishing your baseline',
+                  paused ? 'Baseline paused' : 'Establishing your baseline',
                   style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.teal700),
+                      color: labelColor),
                 ),
               ),
               GestureDetector(
                 onTap: () => setState(() => _dismissed = true),
-                child: const Icon(Icons.close_rounded,
-                    size: 18, color: AppTheme.teal500),
+                child: Icon(Icons.close_rounded, size: 18, color: iconColor),
               ),
             ],
           ),
@@ -510,26 +526,32 @@ class _BaselineProgressCardState extends State<_BaselineProgressCard> {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 6,
-              backgroundColor: AppTheme.teal100,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppTheme.teal500),
+              backgroundColor: barBg,
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
             ),
           ),
           const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                _remainingText,
-                style: const TextStyle(
-                    fontSize: 12, color: AppTheme.teal600),
-              ),
+              if (paused)
+                Row(
+                  children: [
+                    Icon(Icons.watch_off_outlined, size: 12, color: subColor),
+                    const SizedBox(width: 4),
+                    Text('Connect device to resume',
+                        style: TextStyle(fontSize: 12, color: subColor)),
+                  ],
+                )
+              else
+                Text(_remainingText,
+                    style: TextStyle(fontSize: 12, color: subColor)),
               Text(
                 '${(progress * 100).round()}% complete',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.teal600),
+                    color: subColor),
               ),
             ],
           ),
