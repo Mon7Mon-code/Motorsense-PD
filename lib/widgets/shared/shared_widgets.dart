@@ -327,7 +327,7 @@ class SensorCardShell extends StatelessWidget {
           title: 'Connect your wearable',
           body: 'Pair your PD-Monitor device to start tracking movement.',
           iconColor: AppTheme.neutral500,
-          bgColor: AppTheme.neutral50,
+          bgColor: Colors.white,
           borderColor: AppTheme.neutral200,
         );
       case SensorDataState.connecting:
@@ -347,7 +347,7 @@ class SensorCardShell extends StatelessWidget {
           title: 'No recent movement data',
           body: 'Reconnect your device to resume monitoring.',
           iconColor: AppTheme.neutral500,
-          bgColor: AppTheme.neutral50,
+          bgColor: Colors.white,
           borderColor: AppTheme.neutral200,
         );
       default:
@@ -464,7 +464,7 @@ class _SensorConnectingCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
-        color: AppTheme.neutral50,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.neutral200, width: 0.5),
       ),
