@@ -14,8 +14,10 @@ class PatientMyWeekScreen extends StatelessWidget {
     final svc = Provider.of<AppDataService>(context);
     const patientId = 'p001';
     final snapshots = svc.getWeeklySnapshots(patientId);
-    final checkIns = svc.getCheckIns(patientId);
-    final gait = svc.getLatestGait(patientId);
+    final checkIns  = svc.getCheckIns(patientId);
+    final gait      = svc.getLatestGait(patientId);
+    final state     = svc.sensorDataState;
+    final syncAge   = svc.lastSyncAge;
 
     return Scaffold(
       backgroundColor: AppTheme.neutral50,
@@ -26,44 +28,53 @@ class PatientMyWeekScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
         children: [
-          // Plain language insight cards
-          _InsightCard(snapshots: snapshots),
-          const SizedBox(height: 16),
+          // Plain-language insight summary — sensor-derived
+          if (snapshots.isNotEmpty) ...[
+            _InsightCard(snapshots: snapshots),
+            const SizedBox(height: 16),
+          ],
 
-          // Tremor chart — patient view (no numbers, just shape)
+          // Tremor chart — sensor-derived
           const SectionHeader(title: 'Tremor over 7 days'),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Lower is better',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.neutral400,
-                        letterSpacing: 0.3)),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 120,
-                  child: _PatientLineChart(
-                    snapshots: snapshots,
-                    getValue: (s) => s.tremorScore,
-                    color: AppTheme.teal500,
+          if (snapshots.isNotEmpty)
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Lower is better',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.neutral400,
+                          letterSpacing: 0.3)),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 120,
+                    child: _PatientLineChart(
+                      snapshots: snapshots,
+                      getValue: (s) => s.tremorScore,
+                      color: AppTheme.teal500,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: _dayLabels(snapshots),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: _dayLabels(snapshots),
+                  ),
+                ],
+              ),
+            )
+          else
+            SensorCardShell(
+              state: state,
+              lastSyncAge: syncAge,
+              child: const SizedBox.shrink(),
             ),
-          ),
 
           const SizedBox(height: 16),
 
-          // Gait / walking summary
-          if (gait != null) ...[
-            const SectionHeader(title: 'Walking'),
+          // Gait / walking summary — sensor-derived
+          const SectionHeader(title: 'Walking'),
+          if (gait != null)
             AppCard(
               child: Column(
                 children: [
@@ -89,17 +100,40 @@ class PatientMyWeekScreen extends StatelessWidget {
                   ),
                 ],
               ),
+            )
+          else
+            SensorCardShell(
+              state: state,
+              lastSyncAge: syncAge,
+              child: const SizedBox.shrink(),
             ),
-          ],
 
           const SizedBox(height: 16),
 
-          // Wellbeing check-ins history
+          // Wellbeing check-ins — user-entered, always shown
           const SectionHeader(title: 'Your check-ins this week'),
-          ...checkIns.take(7).map((c) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _CheckInTile(checkIn: c),
-              )),
+          if (checkIns.isEmpty)
+            AppCard(
+              child: Row(
+                children: const [
+                  Icon(Icons.sentiment_satisfied_alt_outlined,
+                      size: 20, color: AppTheme.neutral300),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No check-ins recorded yet.\nComplete your daily check-in from the home screen.',
+                      style: TextStyle(
+                          fontSize: 13, color: AppTheme.neutral400, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...checkIns.take(7).map((c) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _CheckInTile(checkIn: c),
+                )),
         ],
       ),
     );
