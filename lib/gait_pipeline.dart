@@ -68,7 +68,7 @@ class GaitAnalysisResult {
       'samples=$samplesUsed, steps=${validation.stepCount})';
 }
 
-/// Dual-sensor gait pipeline: wrist BLE (XIAO) + phone accelerometer.
+/// Dual-sensor gait pipeline: PD-Monitor wrist BLE + phone accelerometer.
 ///
 /// Cadence, stride variability, walking speed, and Axivity-style step metrics
 /// are derived from the phone. Arm swing, symmetry, and sway use the wrist IMU.

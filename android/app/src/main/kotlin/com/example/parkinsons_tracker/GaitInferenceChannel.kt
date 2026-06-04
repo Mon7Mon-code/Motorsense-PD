@@ -80,15 +80,25 @@ class GaitInferenceChannel(
     }
 
     // Copies an asset file to the app's files directory so PyTorch can load it
-   private fun assetToFile(assetName: String): File {
-    val file = File(context.filesDir, assetName)
-    if (!file.exists()) {
-        context.assets.open("flutter_assets/assets/$assetName").use { input ->
-            FileOutputStream(file).use { output ->
-                input.copyTo(output)
+    private fun assetToFile(assetName: String): File {
+        val file = File(context.filesDir, assetName)
+        if (file.exists()) return file
+
+        val assetPaths = listOf(
+            "flutter_assets/assets/$assetName",
+            "assets/$assetName",
+        )
+        var lastError: Exception? = null
+        for (path in assetPaths) {
+            try {
+                context.assets.open(path).use { input ->
+                    FileOutputStream(file).use { output -> input.copyTo(output) }
+                }
+                return file
+            } catch (e: Exception) {
+                lastError = e
             }
         }
+        throw lastError ?: IllegalStateException("Model asset not found: $assetName")
     }
-    return file
-}
 }

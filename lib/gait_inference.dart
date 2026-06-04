@@ -13,6 +13,8 @@
 //   print(result.severity);                 // 0–4
 
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 // ── Feature order — must match train_gait.py all_feats exactly ───────────────
@@ -63,6 +65,7 @@ class GaitInferenceEngine {
   late Map<String, dynamic> _severityThresholds;
 
   bool _initialised = false;
+  bool _nativeModelReady = false;
 
   // Call once before first predict()
   Future<void> init() async {
@@ -77,8 +80,18 @@ class GaitInferenceEngine {
     _std     = features.map<double>((f) => (f['scaler_std']     as num).toDouble()).toList();
     _severityThresholds = json['severity_thresholds'] as Map<String, dynamic>;
 
-    // Pre-load the model on the native side
-    await _channel.invokeMethod('loadModel');
+    try {
+      await _channel.invokeMethod('loadModel');
+      _nativeModelReady = true;
+    } on PlatformException catch (e) {
+      _nativeModelReady = false;
+      debugPrint(
+        '[GaitInferenceEngine] Native model unavailable (${e.code}): ${e.message}',
+      );
+    } catch (e) {
+      _nativeModelReady = false;
+      debugPrint('[GaitInferenceEngine] Native model load failed: $e');
+    }
 
     _initialised = true;
   }
@@ -104,14 +117,20 @@ class GaitInferenceEngine {
       return s > 0 ? (imputed[i] - _mean[i]) / s : 0.0;
     });
 
-    // Step 4 — run native inference
-    final Map<Object?, Object?> nativeResult = await _channel.invokeMethod(
-      'runInference',
-      {'features': scaled},
-    );
-
-    final probability = (nativeResult['probability'] as num).toDouble();
-    final isImpaired  = nativeResult['is_impaired'] as bool;
+    // Step 4 — run native inference (or heuristic fallback if model missing)
+    final double probability;
+    final bool isImpaired;
+    if (_nativeModelReady) {
+      final Map<Object?, Object?> nativeResult = await _channel.invokeMethod(
+        'runInference',
+        {'features': scaled},
+      );
+      probability = (nativeResult['probability'] as num).toDouble();
+      isImpaired = nativeResult['is_impaired'] as bool;
+    } else {
+      probability = _heuristicProbability(scaled);
+      isImpaired = probability >= 0.5;
+    }
 
     // Step 5 — severity banding (uses RAW values, not scaled)
     final severity = isImpaired
@@ -127,6 +146,25 @@ class GaitInferenceEngine {
       severity:      severity,
       severityLabel: GaitResult._labels[severity],
     );
+  }
+
+  /// Lightweight fallback when [gait_classifier.ptl] is not bundled on device.
+  double _heuristicProbability(List<double> scaled) {
+    final cadenceIdx = kFeatureCols.indexOf('CadencetimeDomain');
+    final armIdx = kFeatureCols.indexOf('RA_AMP_U');
+    final cvIdx = kFeatureCols.indexOf('CVStrideTime');
+
+    double score = 0.35;
+    if (cadenceIdx >= 0 && cadenceIdx < scaled.length && scaled[cadenceIdx] < -0.5) {
+      score += 0.2;
+    }
+    if (armIdx >= 0 && armIdx < scaled.length && scaled[armIdx] < -0.5) {
+      score += 0.2;
+    }
+    if (cvIdx >= 0 && cvIdx < scaled.length && scaled[cvIdx] > 0.5) {
+      score += 0.15;
+    }
+    return score.clamp(0.0, 1.0);
   }
 
   int _bandSeverity({required double strideCV, required double armAmp}) {

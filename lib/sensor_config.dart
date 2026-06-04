@@ -1,4 +1,4 @@
-/// Sensor configuration for Seeed XIAO nRF52840 Sense (LSM6DS3TR-C).
+/// Sensor configuration for the PD-Monitor wristband (Seeed XIAO nRF52840 Sense).
 ///
 /// The Seeed Arduino LSM6DS3 library defaults both accelerometer and gyroscope
 /// ODR to 104 Hz. BLE firmware may stream lower (often ~50–100 Hz) depending on
@@ -7,6 +7,25 @@ library;
 
 class SensorConfig {
   SensorConfig._();
+
+  // ── PD-Monitor BLE (firmware contract) ─────────────────────────────────────
+
+  /// Advertised BLE name for the wristband.
+  static const String bleDeviceName = 'PD-Monitor';
+
+  /// GATT service UUID for IMU streaming.
+  static const String bleServiceUuid =
+      'A1B2C3D4-E5F6-7890-ABCD-EF1234567890';
+
+  /// Notify characteristic UUID (6× float32 IMU packet).
+  static const String bleImuCharacteristicUuid =
+      'B2C3D4E5-F6A7-8901-BCDE-F12345678901';
+
+  /// Human-readable label shown in device/onboarding screens.
+  static const String bleDeviceDisplayName = bleDeviceName;
+
+  /// Set true to stream simulated IMU data (no hardware required).
+  static const bool useBleSimulator = false;
 
   /// Default ODR when using Seeed's LSM6DS3 library defaults (104 Hz).
   static const int xiaoLsm6ds3OdrHz = 104;
