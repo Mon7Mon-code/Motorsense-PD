@@ -5,6 +5,7 @@ import '../../services/app_data_service.dart';
 import '../../theme/app_theme.dart';
 import '../../models/patient_data.dart';
 import '../../widgets/shared/shared_widgets.dart';
+import 'patient_checkin_screen.dart';
 import 'patient_device_screen.dart';
 
 class PatientHomeScreen extends StatelessWidget {
@@ -368,29 +369,43 @@ class _CheckInPromptCard extends StatelessWidget {
         last.day == now.day;
   }
 
+  void _openCheckIn(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PatientCheckInScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_doneToday) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.teal50,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.check_rounded, color: AppTheme.teal500, size: 18),
-            const SizedBox(width: 8),
-            Text("Today's check-in done · thanks!",
-                style: const TextStyle(fontSize: 13, color: AppTheme.teal700)),
-          ],
+      return GestureDetector(
+        onTap: () => _openCheckIn(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.teal50,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_rounded, color: AppTheme.teal500, size: 18),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text("Today's check-in done · tap to edit",
+                    style: TextStyle(fontSize: 13, color: AppTheme.teal700)),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 16, color: AppTheme.teal400),
+            ],
+          ),
         ),
       );
     }
 
     return AppCard(
       backgroundColor: AppTheme.teal600,
-      onTap: () {},
+      onTap: () => _openCheckIn(context),
       child: Row(
         children: [
           const Icon(Icons.sentiment_satisfied_alt_outlined,
