@@ -323,29 +323,40 @@ class SensorCardShell extends StatelessWidget {
     switch (state) {
       case SensorDataState.noDevice:
         return _SensorEmptyCard(
-          icon: Icons.watch_off_outlined,
-          title: 'Connect your wearable',
-          body: 'Pair your PD-Monitor device to start tracking movement.',
+          icon: Icons.watch_outlined,
+          title: 'Connect wearable to begin monitoring',
+          body: 'Pair your PD-Monitor device to start receiving movement data.',
           iconColor: AppTheme.neutral500,
           bgColor: Colors.white,
           borderColor: AppTheme.neutral200,
         );
+      // connecting is an active BLE state — the device screen handles spinners.
+      // On the dashboard show a calm passive message so cards don't all spin.
       case SensorDataState.connecting:
-        return _SensorConnectingCard();
+        return _SensorEmptyCard(
+          icon: Icons.watch_outlined,
+          title: 'Waiting for wearable data',
+          body: 'Readings will appear here once the device is set up.',
+          iconColor: AppTheme.neutral500,
+          bgColor: Colors.white,
+          borderColor: AppTheme.neutral200,
+        );
       case SensorDataState.collectingBaseline:
         return _SensorEmptyCard(
           icon: Icons.timeline_rounded,
-          title: 'Baseline in progress',
-          body: 'Symptom scores will appear once your 24-hour baseline is established.',
+          title: 'Establishing your baseline',
+          body: 'Wear your device throughout the day. '
+              'Readings will appear once the 24-hour baseline is complete.',
           iconColor: AppTheme.teal600,
           bgColor: AppTheme.teal50,
           borderColor: AppTheme.teal100,
         );
       case SensorDataState.insufficientData:
         return _SensorEmptyCard(
-          icon: Icons.cloud_off_rounded,
-          title: 'No recent movement data',
-          body: 'Reconnect your device to resume monitoring.',
+          icon: Icons.sensors_off_rounded,
+          title: 'No movement data collected',
+          body: 'Previous readings are unavailable. '
+              'Check your device connection from the device tab.',
           iconColor: AppTheme.neutral500,
           bgColor: Colors.white,
           borderColor: AppTheme.neutral200,
@@ -382,12 +393,12 @@ class _DisconnectedBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String label = 'Device disconnected · showing last known readings';
+    String label = 'Showing previous readings';
     if (age != null) {
       final h = age!.inHours;
       final m = age!.inMinutes % 60;
       final ago = h > 0 ? '${h}h ${m}m ago' : '${m}m ago';
-      label = 'Device disconnected $ago · last known readings';
+      label = 'Showing previous readings · last updated $ago';
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -451,34 +462,6 @@ class _SensorEmptyCard extends StatelessWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(
                   fontSize: 12, color: AppTheme.neutral500, height: 1.4)),
-        ],
-      ),
-    );
-  }
-}
-
-class _SensorConnectingCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.neutral200, width: 0.5),
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 16, height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2, color: AppTheme.teal600),
-          ),
-          SizedBox(width: 10),
-          Text('Connecting to device…',
-              style: TextStyle(fontSize: 13, color: AppTheme.neutral500)),
         ],
       ),
     );
