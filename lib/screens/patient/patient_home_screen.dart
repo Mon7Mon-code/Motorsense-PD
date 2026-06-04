@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/app_data_service.dart';
@@ -84,6 +85,12 @@ class PatientHomeScreen extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 24),
+
+                // Baseline progress card — visible only during first 24h
+                if (!svc.isBaselineComplete) ...[
+                  _BaselineProgressCard(svc: svc),
+                  const SizedBox(height: 16),
+                ],
 
                 // Wellness card — the hero element
                 if (snapshot != null) _WellnessCard(snapshot: snapshot),
@@ -396,6 +403,111 @@ class _CheckInPromptCard extends StatelessWidget {
           ),
           const Icon(Icons.arrow_forward_ios_rounded,
               size: 14, color: Colors.white60),
+        ],
+      ),
+    );
+  }
+}
+
+// --- Baseline progress card ---------------------------------
+class _BaselineProgressCard extends StatefulWidget {
+  final AppDataService svc;
+  const _BaselineProgressCard({required this.svc});
+
+  @override
+  State<_BaselineProgressCard> createState() => _BaselineProgressCardState();
+}
+
+class _BaselineProgressCardState extends State<_BaselineProgressCard> {
+  Timer? _timer;
+  bool _dismissed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _remainingText {
+    final r = widget.svc.baselineTimeRemaining;
+    final h = r.inHours;
+    final m = r.inMinutes % 60;
+    if (h > 0) return '~${h}h ${m}m remaining';
+    return '~${m}m remaining';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+    final progress = widget.svc.baselineProgress;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.teal50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.teal100, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.timeline_rounded,
+                  color: AppTheme.teal600, size: 18),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Establishing your baseline',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.teal700),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _dismissed = true),
+                child: const Icon(Icons.close_rounded,
+                    size: 18, color: AppTheme.teal500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: AppTheme.teal100,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppTheme.teal500),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _remainingText,
+                style: const TextStyle(
+                    fontSize: 12, color: AppTheme.teal600),
+              ),
+              Text(
+                '${(progress * 100).round()}% complete',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.teal600),
+              ),
+            ],
+          ),
         ],
       ),
     );

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -65,7 +66,7 @@ class BleService extends ChangeNotifier {
   /// Nominal ODR for wrist LSM6DS3 (Seeed default: 104 Hz).
   static const int nominalSampleRateHz = SensorConfig.xiaoLsm6ds3OdrHz;
 
-  static const int _simSampleRateHz = nominalSampleRateHz;
+  static const int _simSampleRateHz = SensorConfig.bleCsvOdrHz;
   static const double _simStrideHz = 0.9;
   static const double _simArmAmpDeg = 18.0;
   static const double _simNoise = 0.08;
@@ -85,6 +86,11 @@ class BleService extends ChangeNotifier {
 
   final _sampleController = StreamController<ImuSample>.broadcast();
   Stream<ImuSample> get sampleStream => _sampleController.stream;
+
+  // Emits one raw CSV line per sample (11 columns). Consumed by TremorPipeline
+  // to call ingestReading() without creating a circular import dependency.
+  final _csvLineController = StreamController<String>.broadcast();
+  Stream<String> get csvLineStream => _csvLineController.stream;
 
   Timer? _simTimer;
   double _simT = 0.0;
@@ -138,6 +144,7 @@ class BleService extends ChangeNotifier {
   void dispose() {
     stop();
     _sampleController.close();
+    _csvLineController.close();
     super.dispose();
   }
 
@@ -159,19 +166,69 @@ class BleService extends ChangeNotifier {
       final gyrX = 8.0 * cos(armPhase * 0.5) + _noise() * 3;
       final gyrY = 3.0 * sin(armPhase + 0.8) + _noise() * 2;
 
+      final ts = DateTime.now();
       _sampleController.add(ImuSample(
-        accX: accX,
-        accY: accY,
-        accZ: accZ,
-        gyrX: gyrX,
-        gyrY: gyrY,
-        gyrZ: gyrZ,
-        timestamp: DateTime.now(),
+        accX: accX, accY: accY, accZ: accZ,
+        gyrX: gyrX, gyrY: gyrY, gyrZ: gyrZ,
+        timestamp: ts,
       ));
+
+      // Synthesise a NONE-severity CSV line so TremorPipeline.ingestReading()
+      // fires in simulator mode through the same code path as real hardware.
+      final axRms = sqrt(accX * accX + accY * accY + accZ * accZ);
+      _csvLineController.add(
+        '${axRms.toStringAsFixed(4)},-2.0000,0,0.0500,NONE,'
+        '${accX.toStringAsFixed(4)},${accY.toStringAsFixed(4)},${accZ.toStringAsFixed(4)},'
+        '${gyrX.toStringAsFixed(4)},${gyrY.toStringAsFixed(4)},${gyrZ.toStringAsFixed(4)}',
+      );
     });
   }
 
   double _noise() => (_rng.nextDouble() - 0.5) * 2 * _simNoise;
+
+  /// Decode one BLE notification (up to 10 CSV lines) into ImuSamples and
+  /// raw CSV strings. Timestamps are interpolated backwards from reception
+  /// time using [SensorConfig.bleCsvOdrHz] so downstream frequency analysis
+  /// sees evenly-spaced samples rather than a burst with identical timestamps.
+  void _parseCsvBatch(List<int> bytes) {
+    final text = utf8.decode(bytes, allowMalformed: true);
+    final lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return;
+
+    final now = DateTime.now();
+    const intervalMs = 1000 ~/ SensorConfig.bleCsvOdrHz; // 20 ms
+
+    for (int i = 0; i < lines.length; i++) {
+      final parts = lines[i].split(',');
+      if (parts.length < 11) {
+        debugPrint('[BleService] short CSV line (${parts.length} cols): ${lines[i]}');
+        continue;
+      }
+
+      // Oldest sample is at index 0; newest (closest to now) is at index n-1.
+      final offsetMs = (lines.length - 1 - i) * intervalMs;
+      final ts = now.subtract(Duration(milliseconds: offsetMs));
+
+      try {
+        _sampleController.add(ImuSample(
+          accX: double.parse(parts[5]),
+          accY: double.parse(parts[6]),
+          accZ: double.parse(parts[7]),
+          gyrX: double.parse(parts[8]),
+          gyrY: double.parse(parts[9]),
+          gyrZ: double.parse(parts[10]),
+          timestamp: ts,
+        ));
+        _csvLineController.add(lines[i]);
+      } catch (e) {
+        debugPrint('[BleService] CSV line parse error: $e (${lines[i]})');
+      }
+    }
+  }
 
   Future<void> _startBle() async {
     _setStatus(BleStatus.scanning);
@@ -324,7 +381,7 @@ class BleService extends ChangeNotifier {
     await _charSub?.cancel();
     _charSub = imuChar.onValueReceived.listen((bytes) {
       try {
-        _sampleController.add(ImuSample.fromBytes(bytes));
+        _parseCsvBatch(bytes);
       } catch (e) {
         debugPrint('[BleService] parse error: $e');
       }

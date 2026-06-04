@@ -76,7 +76,7 @@ class GaitPipeline extends ChangeNotifier {
   static const int _windowSec = SensorConfig.gaitWindowSec;
   static const int _analysisIntervalSec = SensorConfig.gaitWindowSec;
   static const int _minSamplesRequired =
-      SensorConfig.xiaoLsm6ds3OdrHz * SensorConfig.gaitMinBufferSec;
+      SensorConfig.bleCsvOdrHz * SensorConfig.gaitMinBufferSec;
 
   static const double _minArmSwingDeg = 5.0;
   static const double _avgStepLengthM = 0.75;
@@ -200,7 +200,7 @@ class GaitPipeline extends ChangeNotifier {
   }
 
   int _maxWristSamples() =>
-      (SensorConfig.xiaoLsm6ds3OdrHz * _windowSec * 1.2).round();
+      (SensorConfig.bleCsvOdrHz * _windowSec * 1.2).round();
 
   int _maxPhoneSamples() => _maxWristSamples();
 

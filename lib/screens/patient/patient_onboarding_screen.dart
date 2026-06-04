@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ble_service.dart';
@@ -800,17 +801,58 @@ class _MedicationsPageState extends State<_MedicationsPage> {
 // ============================================================
 // PAGE 5: BASELINE
 // ============================================================
-class _BaselinePage extends StatelessWidget {
+class _BaselinePage extends StatefulWidget {
   final VoidCallback onFinish;
   final VoidCallback onBack;
   const _BaselinePage({required this.onFinish, required this.onBack});
 
   @override
+  State<_BaselinePage> createState() => _BaselinePageState();
+}
+
+class _BaselinePageState extends State<_BaselinePage> {
+  late final DateTime _pageEnteredAt;
+  Timer? _timer;
+  Duration _elapsed = Duration.zero;
+
+  static const _baselineDuration = Duration(hours: 24);
+
+  @override
+  void initState() {
+    super.initState();
+    _pageEnteredAt = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _elapsed = DateTime.now().difference(_pageEnteredAt);
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  double get _progress =>
+      (_elapsed.inSeconds / _baselineDuration.inSeconds).clamp(0.0, 1.0);
+
+  String get _remainingText {
+    final remaining = _baselineDuration - _elapsed;
+    final h = remaining.inHours;
+    final m = remaining.inMinutes % 60;
+    if (h > 0) return '~${h}h ${m}m remaining';
+    return '~${m}m remaining';
+  }
+
+  @override
   Widget build(BuildContext context) {
     return _OnboardingPage(
       buttonLabel: 'Start using the app',
-      onNext: onFinish,
-      onBack: onBack,
+      onNext: widget.onFinish,
+      onBack: widget.onBack,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -827,7 +869,7 @@ class _BaselinePage extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          // Baseline status card
+          // Baseline progress card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -836,41 +878,53 @@ class _BaselinePage extends StatelessWidget {
               border: Border.all(color: AppTheme.teal100, width: 0.5),
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.timeline_rounded,
-                    color: AppTheme.teal600, size: 32),
+                Row(
+                  children: [
+                    const Icon(Icons.timeline_rounded,
+                        color: AppTheme.teal600, size: 22),
+                    const SizedBox(width: 10),
+                    const Text('Baseline collection',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.teal700)),
+                    const Spacer(),
+                    Text(
+                      '${(_progress * 100).toStringAsFixed(1)}%',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.teal600),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
-                const Text('Baseline collection',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.teal700)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: _progress,
+                    minHeight: 8,
+                    backgroundColor: AppTheme.teal100,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppTheme.teal500),
+                  ),
+                ),
                 const SizedBox(height: 8),
-                // TODO: replace with real baseline progress from processing team
+                Text(
+                  _remainingText,
+                  style: const TextStyle(
+                      fontSize: 12, color: AppTheme.teal600),
+                ),
+                const SizedBox(height: 12),
                 const Text(
-                  'Your device will collect baseline data over the next 24 hours '
-                  'while you go about your normal day.',
-                  textAlign: TextAlign.center,
+                  'Wear your device and go about your normal day. '
+                  'No action is needed from you.',
                   style: TextStyle(
                       fontSize: 13,
                       color: AppTheme.teal600,
                       height: 1.4),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.teal100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'No action needed from you',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.teal800),
-                  ),
                 ),
               ],
             ),

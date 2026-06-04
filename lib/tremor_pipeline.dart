@@ -59,11 +59,13 @@ class TremorReading {
     required this.severity,
   });
 
-  /// Parse from a CSV line: "ax_rms,log_power,dom_freq,p_tremor,severity"
+  /// Parse from an 11-column CSV line (firmware contract):
+  /// ax_rms,log_power,dom_freq,p_tremor,severity,accX,accY,accZ,gyrX,gyrY,gyrZ
+  /// Columns 6-11 (raw IMU) are parsed by BleService into ImuSample; ignored here.
   factory TremorReading.fromCsvRow(String line) {
     final parts = line.trim().split(',');
-    if (parts.length < 5) {
-      throw FormatException('Expected 5 CSV columns, got ${parts.length}: $line');
+    if (parts.length < 11) {
+      throw FormatException('Expected 11 CSV columns, got ${parts.length}: $line');
     }
     return TremorReading(
       axRms:    double.parse(parts[0]),
@@ -144,7 +146,8 @@ class TremorPipeline extends ChangeNotifier {
 
   // ── Internal state ─────────────────────────────────────────────────────────
   final List<ImuSample> _buffer = [];
-  StreamSubscription<ImuSample>? _sub;
+  StreamSubscription<ImuSample>?  _sub;
+  StreamSubscription<String>?     _csvSub;
   Timer? _timer;
 
   TremorResult? _latest;
@@ -186,8 +189,9 @@ class TremorPipeline extends ChangeNotifier {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   void start() {
-    _sub  = _ble.sampleStream.listen(_onSample);
-    _timer = Timer.periodic(
+    _sub    = _ble.sampleStream.listen(_onSample);
+    _csvSub = _ble.csvLineStream.listen(_onCsvLine);
+    _timer  = Timer.periodic(
       Duration(seconds: _analysisIntervalSec),
       (_) => _analyse(),
     );
@@ -198,6 +202,8 @@ class TremorPipeline extends ChangeNotifier {
   void stop() {
     _sub?.cancel();
     _sub = null;
+    _csvSub?.cancel();
+    _csvSub = null;
     _timer?.cancel();
     _timer = null;
     _buffer.clear();
@@ -266,6 +272,14 @@ class TremorPipeline extends ChangeNotifier {
     _buffer.add(s);
     if (_buffer.length > _windowSamples) {
       _buffer.removeRange(0, _buffer.length - _windowSamples);
+    }
+  }
+
+  void _onCsvLine(String line) {
+    try {
+      ingestReading(TremorReading.fromCsvRow(line));
+    } catch (e) {
+      debugPrint('[TremorPipeline] CSV parse error: $e');
     }
   }
 

@@ -273,6 +273,27 @@ class AppDataService extends ChangeNotifier {
     ),
   ];
 
+  static const _baselineDuration = Duration(hours: 24);
+
+  DateTime? get _onboardingTimestamp => _storage.onboardingTimestamp;
+
+  double get baselineProgress {
+    final ts = _onboardingTimestamp;
+    if (ts == null) return 0.0;
+    final elapsed = DateTime.now().difference(ts);
+    return (elapsed.inSeconds / _baselineDuration.inSeconds).clamp(0.0, 1.0);
+  }
+
+  bool get isBaselineComplete => baselineProgress >= 1.0;
+
+  Duration get baselineTimeRemaining {
+    final ts = _onboardingTimestamp;
+    if (ts == null) return _baselineDuration;
+    final elapsed = DateTime.now().difference(ts);
+    final remaining = _baselineDuration - elapsed;
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
   SymptomSnapshot? getBaseline(String patientId) => SymptomSnapshot(
     timestamp: DateTime(2025, 10, 15),
     tremorScore: 0.8, bradykinesiaScore: 0.6,

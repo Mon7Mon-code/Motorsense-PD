@@ -9,6 +9,7 @@ class LocalStorageService {
   static const _keyPatientName  = 'patient_name';
   static const _keyDiagYear     = 'patient_diagnosis_year';
   static const _keyAffectedSide = 'patient_affected_side';
+  static const _keyOnboardingTimestamp = 'onboarding_timestamp';
   static const _keyCheckIns     = 'check_ins_p001';
   static const _keyMedTaken     = 'med_taken_p001';
 
@@ -39,6 +40,10 @@ class LocalStorageService {
   String get patientName   => _prefs.getString(_keyPatientName)  ?? '';
   String get diagnosisYear => _prefs.getString(_keyDiagYear)     ?? '';
   String get affectedSide  => _prefs.getString(_keyAffectedSide) ?? 'Left';
+  DateTime? get onboardingTimestamp {
+    final s = _prefs.getString(_keyOnboardingTimestamp);
+    return s == null ? null : DateTime.tryParse(s);
+  }
 
   Future<void> saveOnboardingProfile({
     required String name,
@@ -49,6 +54,8 @@ class LocalStorageService {
     await _prefs.setString(_keyDiagYear,     diagnosisYear);
     await _prefs.setString(_keyAffectedSide, affectedSide);
     await _prefs.setBool(_keyOnboarded, true);
+    await _prefs.setString(
+        _keyOnboardingTimestamp, DateTime.now().toIso8601String());
   }
 
   // --- Check-ins ---------------------------------------------

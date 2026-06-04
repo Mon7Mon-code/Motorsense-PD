@@ -27,8 +27,13 @@ class SensorConfig {
   /// Set true to stream simulated IMU data (no hardware required).
   static const bool useBleSimulator = false;
 
-  /// Default ODR when using Seeed's LSM6DS3 library defaults (104 Hz).
+  /// Raw hardware ODR of the LSM6DS3 (104 Hz). Used only for reference;
+  /// the firmware outputs CSV at [bleCsvOdrHz], not at this rate.
   static const int xiaoLsm6ds3OdrHz = 104;
+
+  /// Rate at which the firmware emits CSV lines over BLE (one line per sample).
+  /// 10 lines are batched per BLE notification → notification interval ≈ 200 ms.
+  static const int bleCsvOdrHz = 50;
 
   /// Nominal analysis window length (seconds).
   static const int gaitWindowSec = 20;
@@ -36,8 +41,7 @@ class SensorConfig {
   /// Minimum buffered seconds before running inference.
   static const int gaitMinBufferSec = 10;
 
-  /// BLE packet layout for raw IMU notifications (current firmware contract).
-  /// Six float32 values little-endian: accX, accY, accZ, gyrX, gyrY, gyrZ.
+  /// Legacy binary packet size — kept for reference only; firmware now sends CSV.
   static const int bleRawPacketBytes = 24;
 
   /// Estimate effective sample rate from timestamped samples.
