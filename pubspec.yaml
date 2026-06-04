@@ -63,7 +63,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    # Add gait_classifier.ptl here when the trained model file is available.
+    - assets/gait_classifier.ptl
     - assets/scaler_params.json
     - assets/bradykinesia_gait_thresholds.json
 

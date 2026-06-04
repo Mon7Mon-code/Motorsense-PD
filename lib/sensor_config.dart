@@ -47,7 +47,7 @@ class SensorConfig {
   /// Estimate effective sample rate from timestamped samples.
   static double estimateSampleRateHz(
     List<DateTime> timestamps, {
-    double fallbackHz = 104.0,
+    double fallbackHz = 50.0, // matches bleCsvOdrHz
   }) {
     if (timestamps.length < 4) return fallbackHz;
     final spanSec =
