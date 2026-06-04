@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_theme.dart';
+import '../../ble_service.dart';
+import '../../sensor_config.dart';
 import '../../services/app_data_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/shared/shared_widgets.dart';
 import '../patient/patient_shell.dart';
 
@@ -62,10 +64,16 @@ class _PatientOnboardingScreenState extends State<PatientOnboardingScreen> {
     }
   }
 
-  void _finish(BuildContext context) {
-    // Save profile and navigate to main app
-    // TODO: persist to local storage
-    Navigator.of(context).pushReplacement(
+  Future<void> _finish(BuildContext context) async {
+    final svc = Provider.of<AppDataService>(context, listen: false);
+    final nav = Navigator.of(context);
+    await svc.saveOnboardingProfile(
+      name:          _nameController.text.trim(),
+      diagnosisYear: _diagnosisYearController.text.trim(),
+      affectedSide:  _selectedSide ?? 'Left',
+    );
+    if (!mounted) return;
+    nav.pushReplacement(
       MaterialPageRoute(builder: (_) => const PatientShell()),
     );
   }
@@ -457,8 +465,8 @@ class _DevicePage extends StatefulWidget {
 class _DevicePageState extends State<_DevicePage> {
   @override
   Widget build(BuildContext context) {
-    final ble = Provider.of<dynamic>(context);
-    final isConnected = ble?.isActive ?? false;
+    final ble = Provider.of<BleService>(context);
+    final isConnected = ble.isActive;
 
     return _OnboardingPage(
       buttonLabel: isConnected ? 'Continue' : 'Skip for now',
@@ -516,7 +524,7 @@ class _DevicePageState extends State<_DevicePage> {
                       Text(
                         isConnected
                             ? 'Device connected!'
-                            : 'Searching for device...',
+                            : 'Searching for ${SensorConfig.bleDeviceName}…',
                         style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -526,8 +534,8 @@ class _DevicePageState extends State<_DevicePage> {
                       ),
                       Text(
                         isConnected
-                            ? 'PK-Tracker is ready'
-                            : 'Make sure Bluetooth is on',
+                            ? '${SensorConfig.bleDeviceDisplayName} is ready'
+                            : 'Looking for ${SensorConfig.bleDeviceName}…',
                         style: TextStyle(
                             fontSize: 13,
                             color: isConnected

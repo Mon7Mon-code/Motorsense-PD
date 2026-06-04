@@ -48,11 +48,19 @@ class _LoginScreenState extends State<LoginScreen>
       userId: asClinicianMode ? 'c001' : 'p001',
       asClinicianMode: asClinicianMode,
     );
+
+    Widget destination;
+    if (asClinicianMode) {
+      destination = const ClinicianShell();
+    } else if (svc.isOnboardingComplete) {
+      destination = const PatientShell();
+    } else {
+      destination = const PatientOnboardingScreen();
+    }
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => asClinicianMode
-            ? const ClinicianShell()
-            : PatientOnboardingScreen(),
+        pageBuilder: (_, __, ___) => destination,
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 300),

@@ -4,36 +4,69 @@ import '../models/patient_data.dart';
 import '../tremor_pipeline.dart';
 import '../gait_pipeline.dart';
 import '../ble_service.dart';
+import 'local_storage_service.dart';
 
 class AppDataService extends ChangeNotifier {
-  final TremorPipeline tremorPipeline;
-  final GaitPipeline   gaitPipeline;
-  final BleService     bleService;
+  final TremorPipeline        tremorPipeline;
+  final GaitPipeline          gaitPipeline;
+  final BleService            bleService;
+  final LocalStorageService   _storage;
 
   AppDataService({
     required this.tremorPipeline,
     required this.gaitPipeline,
     required this.bleService,
-  }) {
+    required LocalStorageService storage,
+  }) : _storage = storage {
+    bleService.addListener(notifyListeners);
     _subscribeToUpdates();
   }
 
+  // Load persisted data. Call once after construction, before runApp.
+  Future<void> init() async {
+    _checkIns.addAll(_storage.loadCheckIns());
+    _medTakenAt.addAll(_storage.loadMedTaken());
+
+    if (_storage.savedUserId != null) {
+      _currentUserId   = _storage.savedUserId;
+      _isClinicianMode = _storage.savedIsClinician;
+    }
+  }
+
+  // --- Session -----------------------------------------------
   String? _currentUserId;
   bool    _isClinicianMode = false;
-  bool    get isClinicianMode => _isClinicianMode;
-  String? get currentUserId   => _currentUserId;
+  bool    get isClinicianMode     => _isClinicianMode;
+  String? get currentUserId       => _currentUserId;
+  bool    get isOnboardingComplete => _storage.isOnboardingComplete;
 
   void login({required String userId, required bool asClinicianMode}) {
     _currentUserId   = userId;
     _isClinicianMode = asClinicianMode;
+    unawaited(_storage.saveSession(userId, asClinicianMode));
     notifyListeners();
   }
 
   void logout() {
     _currentUserId = null;
+    unawaited(_storage.clearSession());
     notifyListeners();
   }
 
+  Future<void> saveOnboardingProfile({
+    required String name,
+    required String diagnosisYear,
+    required String affectedSide,
+  }) async {
+    await _storage.saveOnboardingProfile(
+      name: name,
+      diagnosisYear: diagnosisYear,
+      affectedSide: affectedSide,
+    );
+    notifyListeners();
+  }
+
+  // --- Pipeline subscriptions --------------------------------
   TremorResult?       _latestTremor;
   GaitAnalysisResult? _latestGait;
   final List<TremorResult>       _tremorHistory = [];
@@ -58,20 +91,23 @@ class AppDataService extends ChangeNotifier {
 
   @override
   void dispose() {
+    bleService.removeListener(notifyListeners);
     _tremorSub?.cancel();
     _gaitSub?.cancel();
     super.dispose();
   }
 
+  // --- Device ------------------------------------------------
   DeviceStatus getDeviceStatus(String patientId) {
     return DeviceStatus(
       isConnected:    bleService.isActive,
-      batteryPercent: 0, // TODO: hardware team to add batteryPercent to BleService
+      batteryPercent: bleService.batteryPercent,
       lastSyncTime:   _latestTremor?.timestamp ?? _latestGait?.timestamp,
       isWorn:         bleService.isActive,
     );
   }
 
+  // --- Symptom snapshots -------------------------------------
   SymptomSnapshot? getLatestSnapshot(String patientId) {
     if (_latestTremor == null) return _mockSnapshot();
     return SymptomSnapshot(
@@ -176,6 +212,7 @@ class AppDataService extends ChangeNotifier {
     return result;
   }
 
+  // --- Medication response -----------------------------------
   List<MedicationResponsePoint> getMedicationResponse(String patientId) {
     final meds = getMedications(patientId);
     if (meds.isEmpty || _tremorHistory.length < 5) return _mockMedicationResponse();
@@ -211,6 +248,7 @@ class AppDataService extends ChangeNotifier {
     return lastDose == null ? null : t.difference(lastDose).inMinutes.toDouble();
   }
 
+  // --- Patient / clinician data ------------------------------
   List<Patient> getPatients(String clinicianId) => _buildPatients();
   Patient? getPatient(String patientId) =>
       _buildPatients().firstWhere((p) => p.id == patientId,
@@ -218,10 +256,13 @@ class AppDataService extends ChangeNotifier {
 
   List<Patient> _buildPatients() => [
     Patient(
-      id: 'p001', name: 'Margaret Ellis', age: 68, diagnosisYear: '2019',
+      id: 'p001',
+      name: _storage.patientName.isNotEmpty ? _storage.patientName : 'Margaret Ellis',
+      age: 68,
+      diagnosisYear: _storage.diagnosisYear.isNotEmpty ? _storage.diagnosisYear : '2019',
       assignedClinicianId: 'c001',
       deviceStatus:       getDeviceStatus('p001'),
-      medications:        _staticMedications,
+      medications:        getMedications('p001'),
       weeklySnapshots:    getWeeklySnapshots('p001'),
       weeklyGait:         getWeeklyGait('p001'),
       medicationResponse: getMedicationResponse('p001'),
@@ -238,6 +279,7 @@ class AppDataService extends ChangeNotifier {
     dyskinesiaScore: 0.1, rigidityScore: 0.5,
   );
 
+  // --- Check-ins (persisted) ---------------------------------
   final List<WellbeingCheckIn> _checkIns = [];
   List<WellbeingCheckIn> getCheckIns(String patientId) => _checkIns;
 
@@ -249,18 +291,38 @@ class AppDataService extends ChangeNotifier {
       date: DateTime.now(), feelingScore: feelingScore,
       notes: notes, symptoms: symptoms,
     ));
+    unawaited(_storage.saveCheckIns(_checkIns));
     notifyListeners();
   }
 
-  List<MedicationEntry> getMedications(String patientId) => _staticMedications;
-  void logMedicationTaken(String patientId, String medicationId) => notifyListeners();
+  // --- Medications (taken timestamps persisted) --------------
+  final Map<String, List<DateTime>> _medTakenAt = {};
+
+  List<MedicationEntry> getMedications(String patientId) {
+    return _kBaseMedications.map((m) => MedicationEntry(
+      id:             m.id,
+      name:           m.name,
+      dose:           m.dose,
+      scheduledTimes: m.scheduledTimes,
+      takenAt:        List.unmodifiable(_medTakenAt[m.id] ?? const []),
+      color:          m.color,
+    )).toList();
+  }
+
+  void logMedicationTaken(String patientId, String medicationId) {
+    _medTakenAt.putIfAbsent(medicationId, () => []).add(DateTime.now());
+    unawaited(_storage.saveMedTaken(_medTakenAt));
+    notifyListeners();
+  }
+
   List<Appointment> getAppointments(String patientId) => _staticAppointments;
 
-  static final _staticMedications = [
-    MedicationEntry(id: 'm001', name: 'Levodopa / Carbidopa', dose: '100mg / 25mg',
-        scheduledTimes: ['07:30', '12:30', '17:30'], takenAt: [], color: '#1D9E75'),
-    MedicationEntry(id: 'm002', name: 'Pramipexole', dose: '0.5mg',
-        scheduledTimes: ['08:00', '20:00'], takenAt: [], color: '#185FA5'),
+  // --- Static seed data --------------------------------------
+  static const _kBaseMedications = [
+    _MedBase(id: 'm001', name: 'Levodopa / Carbidopa', dose: '100mg / 25mg',
+        scheduledTimes: ['07:30', '12:30', '17:30'], color: '#1D9E75'),
+    _MedBase(id: 'm002', name: 'Pramipexole', dose: '0.5mg',
+        scheduledTimes: ['08:00', '20:00'], color: '#185FA5'),
   ];
 
   static final _staticAppointments = [
@@ -279,6 +341,7 @@ class AppDataService extends ChangeNotifier {
         ]),
   ];
 
+  // --- Mock fallbacks (used when no sensor data yet) ---------
   SymptomSnapshot _mockSnapshot() => SymptomSnapshot(
     timestamp: DateTime.now(), tremorScore: 1.2,
     bradykinesiaScore: 0.8, dyskinesiaScore: 0.3, rigidityScore: 0.6,
@@ -316,4 +379,17 @@ class AppDataService extends ChangeNotifier {
       );
     });
   }
+}
+
+// Simple data holder for the medication seed list.
+class _MedBase {
+  final String id, name, dose, color;
+  final List<String> scheduledTimes;
+  const _MedBase({
+    required this.id,
+    required this.name,
+    required this.dose,
+    required this.scheduledTimes,
+    required this.color,
+  });
 }
