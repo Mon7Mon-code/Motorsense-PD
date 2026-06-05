@@ -26,6 +26,16 @@ android {
         versionName = flutter.versionName
     }
 
+    packaging {
+        jniLibs {
+            // PyTorch, sensors_plus, and flutter_blue_plus each bundle their own
+            // libc++_shared.so. Without pickFirst the linker picks an arbitrary
+            // copy at build time; if versions are incompatible the app crashes
+            // immediately on launch before Flutter initialises.
+            pickFirsts += "lib/*/libc++_shared.so"
+        }
+    }
+
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
