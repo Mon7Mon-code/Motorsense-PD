@@ -158,14 +158,11 @@ class _OnboardingPage extends StatelessWidget {
   final String? buttonLabel;
   final VoidCallback? onNext;
   final VoidCallback? onBack;
-  final bool buttonEnabled;
-
   const _OnboardingPage({
     required this.child,
     this.buttonLabel,
     this.onNext,
     this.onBack,
-    this.buttonEnabled = true,
   });
 
   @override
@@ -184,7 +181,7 @@ class _OnboardingPage extends StatelessWidget {
             children: [
               if (buttonLabel != null)
                 ElevatedButton(
-                  onPressed: buttonEnabled ? onNext : null,
+                  onPressed: onNext,
                   style: ElevatedButton.styleFrom(
                     disabledBackgroundColor: AppTheme.neutral100,
                     disabledForegroundColor: AppTheme.neutral400,

@@ -143,7 +143,7 @@ class _Hero extends StatelessWidget {
 
   String get _wellnessLabel {
     final w = _wellness;
-    if (w == null)  return 'Collecting data';
+    if (w == null)  return '';
     if (w > 0.80)   return 'Doing well today';
     if (w > 0.60)   return 'A comfortable day';
     if (w > 0.40)   return 'A harder day';
@@ -233,7 +233,6 @@ class _Hero extends StatelessWidget {
                                 height: 1.05,
                                 letterSpacing: -1.0)),
                         const SizedBox(height: 10),
-                        // Wellness label pill
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 5),
@@ -241,7 +240,7 @@ class _Hero extends StatelessWidget {
                             color: Colors.white.withValues(alpha:0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Text(_wellnessLabel,
+                          child: Text(hasData ? _wellnessLabel : 'Data collection paused',
                               style: const TextStyle(
                                   fontSize: 13,
                                   color: Colors.white,
