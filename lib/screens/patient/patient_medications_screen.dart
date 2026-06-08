@@ -16,7 +16,11 @@ class PatientMedicationsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.neutral50,
       appBar: AppBar(
-    title: const Text('Medications'),
+    title: const Text('Medications',
+        style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700)),
     backgroundColor: const Color(0xFF0F3D24),
     foregroundColor: Colors.white,
     shape: const RoundedRectangleBorder(

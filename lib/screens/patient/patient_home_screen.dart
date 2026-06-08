@@ -133,17 +133,21 @@ class _Hero extends StatelessWidget {
     required this.onSettings, required this.onHistory,
   });
 
-  double get _wellness => snapshot?.overallWellness ?? 0.85;
+  double? get _wellness => snapshot?.overallWellness;
 
   String get _wellnessLabel {
-    if (_wellness > 0.80) return 'Doing well today';
-    if (_wellness > 0.60) return 'A comfortable day';
-    if (_wellness > 0.40) return 'A harder day';
+    final w = _wellness;
+    if (w == null)  return 'Collecting data';
+    if (w > 0.80)   return 'Doing well today';
+    if (w > 0.60)   return 'A comfortable day';
+    if (w > 0.40)   return 'A harder day';
     return 'A challenging day';
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasData = _wellness != null;
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -233,7 +237,7 @@ class _Hero extends StatelessWidget {
                   ),
                   const SizedBox(width: 20),
 
-                  // Ring
+                  // Ring — empty state when no data yet
                   SizedBox(
                     width: 86,
                     height: 86,
@@ -243,11 +247,11 @@ class _Hero extends StatelessWidget {
                         SizedBox(
                           width: 86, height: 86,
                           child: CircularProgressIndicator(
-                            value: _wellness,
+                            value: hasData ? _wellness : 0.0,
                             strokeWidth: 7,
                             backgroundColor: Colors.white.withValues(alpha:0.15),
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                hasData ? Colors.white : Colors.white30),
                             strokeCap: StrokeCap.round,
                           ),
                         ),
@@ -255,11 +259,13 @@ class _Hero extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '${(_wellness * 100).round()}',
-                              style: const TextStyle(
-                                  fontSize: 22,
+                              hasData ? '${(_wellness! * 100).round()}' : '––',
+                              style: TextStyle(
+                                  fontSize: hasData ? 22 : 18,
                                   fontWeight: FontWeight.w800,
-                                  color: Colors.white,
+                                  color: hasData
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.45),
                                   height: 1.0),
                             ),
                             Text('/100',
