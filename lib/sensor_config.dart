@@ -27,7 +27,7 @@ class SensorConfig {
   // ── DEMO MODE ──────────────────────────────────────────────────────────────
 
   /// Master demo flag.  Set to true for demo day; false for real-world use.
-  static const bool demoMode = false;           // ← flip before submission
+  static const bool demoMode = true;           // ← flip before submission
 
   // ── PD-Monitor BLE (firmware contract) ─────────────────────────────────────
 

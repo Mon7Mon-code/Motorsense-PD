@@ -11,6 +11,7 @@ import 'screens/patient/patient_shell.dart';
 import 'screens/patient/patient_onboarding_screen.dart';
 import 'screens/clinician/clinician_shell.dart';
 import 'ble_service.dart';
+import 'sensor_config.dart';
 import 'tremor_pipeline.dart';
 import 'gait_pipeline.dart';
 import 'gait_inference.dart';
@@ -54,6 +55,8 @@ void main() async {
 }
 
 Widget _resolveInitialScreen(AppDataService svc) {
+  // Demo mode always starts at login so visitors see the full flow.
+  if (SensorConfig.demoMode)         return const LoginScreen();
   if (svc.currentUserId == null)     return const LoginScreen();
   if (svc.isClinicianMode)           return const ClinicianShell();
   if (svc.isOnboardingComplete)      return const PatientShell();
@@ -65,6 +68,12 @@ Future<void> _bootstrapPipelines({
   required TremorPipeline tremor,
   required GaitPipeline gait,
 }) async {
+  // Skip BLE and pipelines in demo mode — no hardware needed and avoids
+  // interfering with any real device connection running on another phone.
+  if (SensorConfig.demoMode) {
+    await gait.init(); // still load the ML model so gait inference is ready
+    return;
+  }
   try {
     await gait.init();
     await ble.start();
