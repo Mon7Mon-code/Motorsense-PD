@@ -86,9 +86,9 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
                         trailing: IconButton(
                           icon: const Icon(Icons.edit_outlined,
                               size: 18, color: AppTheme.neutral400),
-                          onPressed: () =>
-                              _showEditMedSheet(context, med.name, med.dose,
-                                  med.scheduledTimes),
+                          onPressed: () => _showEditMedSheet(
+                              context, svc, med.id, med.name, med.dose,
+                              med.scheduledTimes),
                         ),
                       ),
                       if (i < meds.length - 1)
@@ -105,7 +105,7 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: AppTheme.teal600)),
-                  onTap: () => _showAddMedSheet(context),
+                  onTap: () => _showAddMedSheet(context, svc),
                 ),
               ],
             ),
@@ -229,8 +229,12 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
     );
   }
 
-  void _showEditMedSheet(BuildContext context, String name, String dose,
-      List<String> times) {
+  void _showEditMedSheet(BuildContext context, AppDataService svc,
+      String id, String name, String dose, List<String> times) {
+    final nameCtrl = TextEditingController(text: name);
+    final doseCtrl = TextEditingController(text: dose);
+    final editTimes = List<String>.from(times);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -238,62 +242,132 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(name,
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(dose,
-                style: const TextStyle(
-                    fontSize: 14, color: AppTheme.neutral500)),
-            const SizedBox(height: 20),
-            const Text('Scheduled times',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.neutral700)),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              children: times
-                  .map((t) => Chip(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Edit medication',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w600)),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      svc.removeMedication(id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('$name removed'),
+                          backgroundColor: AppTheme.red400,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.red400),
+                    child: const Text('Remove'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Medication name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: doseCtrl,
+                decoration: const InputDecoration(labelText: 'Dose'),
+              ),
+              const SizedBox(height: 16),
+              const Text('Scheduled times',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.neutral700)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  ...editTimes.map((t) => Chip(
                         label: Text(t,
                             style: AppTheme.mono.copyWith(fontSize: 12)),
                         backgroundColor: AppTheme.teal50,
                         side: const BorderSide(
                             color: AppTheme.teal100, width: 0.5),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 20),
-            // TODO: add time editing when medication management is wired to storage
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.neutral100,
-                borderRadius: BorderRadius.circular(10),
+                        deleteIcon:
+                            const Icon(Icons.close_rounded, size: 14),
+                        onDeleted: () =>
+                            setSheetState(() => editTimes.remove(t)),
+                      )),
+                  ActionChip(
+                    label: const Text('+ Add time',
+                        style: TextStyle(
+                            fontSize: 12, color: AppTheme.teal600)),
+                    backgroundColor: AppTheme.teal50,
+                    side: const BorderSide(
+                        color: AppTheme.teal100, width: 0.5),
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        final f =
+                            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                        setSheetState(() {
+                          if (!editTimes.contains(f)) {
+                            editTimes
+                              ..add(f)
+                              ..sort();
+                          }
+                        });
+                      }
+                    },
+                  ),
+                ],
               ),
-              child: const Text(
-                'Full medication editing coming soon. '
-                'For now, update your schedule with your clinician.',
-                style: TextStyle(fontSize: 12, color: AppTheme.neutral500),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final n = nameCtrl.text.trim();
+                    final d = doseCtrl.text.trim();
+                    if (n.isEmpty || d.isEmpty) return;
+                    svc.updateMedication(id,
+                        name: n, dose: d, scheduledTimes: List.from(editTimes));
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Medication updated'),
+                        backgroundColor: AppTheme.teal600,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('Save changes'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  void _showAddMedSheet(BuildContext context) {
+  void _showAddMedSheet(BuildContext context, AppDataService svc) {
     final nameCtrl = TextEditingController();
     final doseCtrl = TextEditingController();
+    final times = <String>[];
 
     showModalBottomSheet(
       context: context,
@@ -302,48 +376,106 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Add medication',
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Medication name',
-                hintText: 'e.g. Levodopa',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Add medication',
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Medication name',
+                  hintText: 'e.g. Levodopa',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: doseCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Dose',
-                hintText: 'e.g. 100mg',
+              const SizedBox(height: 12),
+              TextField(
+                controller: doseCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Dose',
+                  hintText: 'e.g. 100mg',
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // TODO: wire to AppDataService when medication persistence is added
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Medication added'),
-                    backgroundColor: AppTheme.teal600,
-                    behavior: SnackBarBehavior.floating,
+              const SizedBox(height: 16),
+              const Text('Scheduled times',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.neutral700)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  ...times.map((t) => Chip(
+                        label: Text(t,
+                            style: AppTheme.mono.copyWith(fontSize: 12)),
+                        backgroundColor: AppTheme.teal50,
+                        side: const BorderSide(
+                            color: AppTheme.teal100, width: 0.5),
+                        deleteIcon:
+                            const Icon(Icons.close_rounded, size: 14),
+                        onDeleted: () =>
+                            setSheetState(() => times.remove(t)),
+                      )),
+                  ActionChip(
+                    label: const Text('+ Add time',
+                        style: TextStyle(
+                            fontSize: 12, color: AppTheme.teal600)),
+                    backgroundColor: AppTheme.teal50,
+                    side: const BorderSide(
+                        color: AppTheme.teal100, width: 0.5),
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: const TimeOfDay(hour: 8, minute: 0),
+                      );
+                      if (picked != null) {
+                        final f =
+                            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                        setSheetState(() {
+                          if (!times.contains(f)) {
+                            times
+                              ..add(f)
+                              ..sort();
+                          }
+                        });
+                      }
+                    },
                   ),
-                );
-              },
-              child: const Text('Add'),
-            ),
-          ],
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final n = nameCtrl.text.trim();
+                    final d = doseCtrl.text.trim();
+                    if (n.isEmpty || d.isEmpty) return;
+                    svc.addMedication(
+                        name: n, dose: d, scheduledTimes: List.from(times));
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$n added'),
+                        backgroundColor: AppTheme.teal600,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('Add medication'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

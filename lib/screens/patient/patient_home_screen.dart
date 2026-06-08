@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../sensor_config.dart';
 import '../../services/app_data_service.dart';
 import '../../theme/app_theme.dart';
 import '../../models/patient_data.dart';
@@ -191,6 +192,15 @@ class _Hero extends StatelessWidget {
                             fontSize: 12,
                             color: Colors.white.withValues(alpha:0.55),
                             fontWeight: FontWeight.w500)),
+                    if (SensorConfig.demoMode) ...[
+                      const SizedBox(width: 4),
+                      Text('demo',
+                          style: TextStyle(
+                              fontSize: 9,
+                              color: Colors.white.withValues(alpha: 0.35),
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: 0.2)),
+                    ],
                   ]),
                   Row(children: [
                     _Btn(icon: Icons.history_rounded,   onTap: onHistory),

@@ -13,6 +13,7 @@ class LocalStorageService {
   static const _keyBaselineElapsedSeconds = 'baseline_elapsed_seconds';
   static const _keyCheckIns     = 'check_ins_p001';
   static const _keyMedTaken     = 'med_taken_p001';
+  static const _keyMedications  = 'medications_p001';
 
   final SharedPreferences _prefs;
   LocalStorageService._(this._prefs);
@@ -107,6 +108,21 @@ class LocalStorageService {
         MapEntry(k, v.map((d) => d.toIso8601String()).toList()),
       )),
     );
+  }
+
+  // --- Medications list (structure, not taken timestamps) ----
+  List<Map<String, dynamic>> loadMedications() {
+    final raw = _prefs.getString(_keyMedications);
+    if (raw == null) return [];
+    try {
+      return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveMedications(List<Map<String, dynamic>> meds) async {
+    await _prefs.setString(_keyMedications, jsonEncode(meds));
   }
 
   // --- Serialization helpers ---------------------------------

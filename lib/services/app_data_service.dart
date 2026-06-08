@@ -40,6 +40,12 @@ class AppDataService extends ChangeNotifier {
   Future<void> init() async {
     _checkIns.addAll(_storage.loadCheckIns());
     _medTakenAt.addAll(_storage.loadMedTaken());
+    final savedMeds = _storage.loadMedications();
+    if (savedMeds.isNotEmpty) {
+      _medications
+        ..clear()
+        ..addAll(savedMeds.map(_medFromJson));
+    }
     _accumulatedBaselineSeconds = _storage.baselineElapsedSeconds;
 
     if (_storage.savedUserId != null) {
@@ -425,11 +431,21 @@ class AppDataService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Medications (taken timestamps persisted) --------------
+  // --- Medications (list + taken timestamps persisted) -------
   final Map<String, List<DateTime>> _medTakenAt = {};
+  final List<_MedBase> _medications = [
+    const _MedBase(id: 'm001', name: 'Levodopa / Carbidopa', dose: '100mg / 25mg',
+        scheduledTimes: ['07:30', '12:30', '17:30'], color: '#1D9E75'),
+    const _MedBase(id: 'm002', name: 'Pramipexole', dose: '0.5mg',
+        scheduledTimes: ['08:00', '20:00'], color: '#185FA5'),
+  ];
+
+  static const _kMedColors = [
+    '#1D9E75', '#185FA5', '#9E4C1D', '#7B1D9E', '#CF8C2A', '#2A8DCF',
+  ];
 
   List<MedicationEntry> getMedications(String patientId) {
-    return _kBaseMedications.map((m) => MedicationEntry(
+    return _medications.map((m) => MedicationEntry(
       id:             m.id,
       name:           m.name,
       dose:           m.dose,
@@ -445,15 +461,63 @@ class AppDataService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addMedication({
+    required String name,
+    required String dose,
+    required List<String> scheduledTimes,
+    String? color,
+  }) {
+    final id = 'm_${DateTime.now().millisecondsSinceEpoch}';
+    final c = color ?? _kMedColors[_medications.length % _kMedColors.length];
+    _medications.add(_MedBase(id: id, name: name, dose: dose,
+        scheduledTimes: List.unmodifiable(scheduledTimes), color: c));
+    unawaited(_storage.saveMedications(_medications.map(_medToJson).toList()));
+    notifyListeners();
+  }
+
+  void removeMedication(String medicationId) {
+    _medications.removeWhere((m) => m.id == medicationId);
+    _medTakenAt.remove(medicationId);
+    unawaited(_storage.saveMedications(_medications.map(_medToJson).toList()));
+    unawaited(_storage.saveMedTaken(_medTakenAt));
+    notifyListeners();
+  }
+
+  void updateMedication(String medicationId, {
+    String? name, String? dose, List<String>? scheduledTimes,
+  }) {
+    final idx = _medications.indexWhere((m) => m.id == medicationId);
+    if (idx < 0) return;
+    final e = _medications[idx];
+    _medications[idx] = _MedBase(
+      id: e.id,
+      name: name ?? e.name,
+      dose: dose ?? e.dose,
+      scheduledTimes: scheduledTimes != null
+          ? List.unmodifiable(scheduledTimes)
+          : e.scheduledTimes,
+      color: e.color,
+    );
+    unawaited(_storage.saveMedications(_medications.map(_medToJson).toList()));
+    notifyListeners();
+  }
+
+  static Map<String, dynamic> _medToJson(_MedBase m) => {
+    'id': m.id, 'name': m.name, 'dose': m.dose,
+    'scheduledTimes': m.scheduledTimes, 'color': m.color,
+  };
+
+  static _MedBase _medFromJson(Map<String, dynamic> j) => _MedBase(
+    id: j['id'] as String,
+    name: j['name'] as String,
+    dose: j['dose'] as String,
+    scheduledTimes: List.unmodifiable((j['scheduledTimes'] as List).cast<String>()),
+    color: j['color'] as String,
+  );
+
   List<Appointment> getAppointments(String patientId) => _staticAppointments;
 
   // --- Static seed data --------------------------------------
-  static const _kBaseMedications = [
-    _MedBase(id: 'm001', name: 'Levodopa / Carbidopa', dose: '100mg / 25mg',
-        scheduledTimes: ['07:30', '12:30', '17:30'], color: '#1D9E75'),
-    _MedBase(id: 'm002', name: 'Pramipexole', dose: '0.5mg',
-        scheduledTimes: ['08:00', '20:00'], color: '#185FA5'),
-  ];
 
   // ── DEMO DATA ────────────────────────────────────────────────────────────────
   // All values below are used when SensorConfig.demoMode == true.

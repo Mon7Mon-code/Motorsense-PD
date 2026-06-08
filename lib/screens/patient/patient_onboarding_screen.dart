@@ -694,7 +694,7 @@ class _MedicationsPageState extends State<_MedicationsPage> {
                                   fontSize: 12, color: AppTheme.neutral500)),
                           const SizedBox(height: 4),
                           Text(
-                            (med['times'] as List<String>).join(' · '),
+                            (med['times'] as List).cast<String>().join(' · '),
                             style: AppTheme.mono.copyWith(fontSize: 11),
                           ),
                         ],
