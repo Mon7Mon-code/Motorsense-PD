@@ -101,6 +101,7 @@ class BleService extends ChangeNotifier {
   StreamSubscription<List<int>>? _batterySub;
   StreamSubscription<BluetoothConnectionState>? _connStateSub;
   BluetoothDevice? _bleDevice;
+  String _csvBuffer = '';
 
   /// Start streaming IMU data (simulator or PD-Monitor BLE).
   Future<void> start() async {
@@ -191,8 +192,12 @@ class BleService extends ChangeNotifier {
   /// time using [SensorConfig.bleCsvOdrHz] so downstream frequency analysis
   /// sees evenly-spaced samples rather than a burst with identical timestamps.
   void _parseCsvBatch(List<int> bytes) {
-    final text = utf8.decode(bytes, allowMalformed: true);
-    final lines = text
+    _csvBuffer += utf8.decode(bytes, allowMalformed: true);
+    final newlineIdx = _csvBuffer.lastIndexOf('\n');
+    if (newlineIdx < 0) return; // no complete line yet
+    final complete = _csvBuffer.substring(0, newlineIdx);
+    _csvBuffer = _csvBuffer.substring(newlineIdx + 1);
+    final lines = complete
         .split('\n')
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)

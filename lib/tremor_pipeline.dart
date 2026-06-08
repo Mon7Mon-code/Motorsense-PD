@@ -425,11 +425,12 @@ class TremorPipeline extends ChangeNotifier {
   /// format) remains reserved for the Goertzel path.
   static int _severityFromString(String s) {
     switch (s.toUpperCase()) {
-      case 'MILD':     return 1;
-      case 'MODERATE': return 2;
-      case 'SEVERE':   return 3;
+      case 'MILD':        return 1;
+      case 'MODERATE':    return 2;
+      case 'SEVERE':      return 3;
+      case 'VERY_SEVERE': return 4;
       case 'NONE':
-      default:         return 0;
+      default:            return 0;
     }
   }
 

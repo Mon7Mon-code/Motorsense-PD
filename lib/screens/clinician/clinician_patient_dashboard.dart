@@ -140,22 +140,20 @@ class _OverviewTab extends StatelessWidget {
           SensorCardShell(
             state: state,
             lastSyncAge: syncAge,
-            child: GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.0,
+            child: Column(
               children: [
-                _BaselineTile(label: 'Tremor',
-                    current: snapshot.tremorScore, baseline: baseline.tremorScore),
-                _BaselineTile(label: 'Bradykinesia',
-                    current: snapshot.bradykinesiaScore, baseline: baseline.bradykinesiaScore),
+                Row(
+                  children: [
+                    Expanded(child: _BaselineTile(label: 'Tremor',
+                        current: snapshot.tremorScore, baseline: baseline.tremorScore)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _BaselineTile(label: 'Bradykinesia',
+                        current: snapshot.bradykinesiaScore, baseline: baseline.bradykinesiaScore)),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 _BaselineTile(label: 'Dyskinesia',
                     current: snapshot.dyskinesiaScore, baseline: baseline.dyskinesiaScore),
-                _BaselineTile(label: 'Rigidity',
-                    current: snapshot.rigidityScore, baseline: baseline.rigidityScore),
               ],
             ),
           ),
@@ -190,8 +188,6 @@ class _OverviewTab extends StatelessWidget {
                       ScoreBar(label: 'Bradykinesia', score: snapshot.bradykinesiaScore, showLabel: false),
                       const SizedBox(height: 12),
                       ScoreBar(label: 'Dyskinesia', score: snapshot.dyskinesiaScore, showLabel: false),
-                      const SizedBox(height: 12),
-                      ScoreBar(label: 'Rigidity', score: snapshot.rigidityScore, showLabel: false),
                     ],
                   ),
                 )
@@ -342,6 +338,7 @@ class _BaselineTile extends StatelessWidget {
     );
   }
 }
+
 
 // ============================================================
 // TAB 2: SYMPTOMS — 7-day trends with full chart

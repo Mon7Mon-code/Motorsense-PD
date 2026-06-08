@@ -7,6 +7,7 @@ import '../../models/patient_data.dart';
 import '../../widgets/shared/shared_widgets.dart';
 import 'patient_checkin_screen.dart';
 import 'patient_device_screen.dart';
+import '../login_screen.dart';
 
 class PatientHomeScreen extends StatelessWidget {
   const PatientHomeScreen({super.key});
@@ -56,6 +57,16 @@ class PatientHomeScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                         builder: (_) => const PatientDeviceScreen())),
+              ),
+              IconButton(
+                icon: const Icon(Icons.logout_rounded, size: 20),
+                color: AppTheme.neutral700,
+                onPressed: () {
+                  context.read<AppDataService>().logout();
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
               ),
               const SizedBox(width: 4),
             ],

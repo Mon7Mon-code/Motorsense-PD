@@ -5,6 +5,7 @@ import '../tremor_pipeline.dart';
 import '../gait_pipeline.dart';
 import '../ble_service.dart';
 import 'local_storage_service.dart';
+import '../sensor_config.dart';
 
 /// Which data-quality state a sensor-derived card should display.
 /// Ordered from "best" to "worst" — callers may compare with >=.
@@ -171,7 +172,6 @@ class AppDataService extends ChangeNotifier {
       tremorScore:       _latestTremor!.tremorSeverity.toDouble(),
       bradykinesiaScore: _bradykinesiaScore(),
       dyskinesiaScore:   _latestTremor!.dyskinesiaSeverity.toDouble(),
-      rigidityScore:     0.0,
     );
   }
 
@@ -198,16 +198,7 @@ class AppDataService extends ChangeNotifier {
           tremorScore:       last.tremorSeverity.toDouble(),
           bradykinesiaScore: g?.bradykinesiaSeverity.toDouble() ?? 0.0,
           dyskinesiaScore:   last.dyskinesiaSeverity.toDouble(),
-          rigidityScore:     0.0,
-        ));
-      } else {
-        result.add(SymptomSnapshot(
-          timestamp:         day,
-          tremorScore:       _latestTremor?.tremorSeverity.toDouble() ?? 0.0,
-          bradykinesiaScore: _bradykinesiaScore(),
-          dyskinesiaScore:   _latestTremor?.dyskinesiaSeverity.toDouble() ?? 0.0,
-          rigidityScore:     0.0,
-        ));
+            ));
       }
     }
     return result;
@@ -229,7 +220,7 @@ class AppDataService extends ChangeNotifier {
       strideLength:  cad > 0 ? speed * 60.0 / cad : 0.0,
       stepFrequency: cad,
       armSwingScore: r.bradykinesiaSeverity.toDouble(),
-      gaitSymmetry:  (r.features['SYM_U'] ?? 0.80).clamp(0.0, 1.0),
+      gaitSymmetry:  (r.features['SYM_U'] ?? 0.0).clamp(0.0, 1.0),
       walkingSpeed:  speed,
       stepCount:     r.validation.stepCount,
     );
@@ -257,11 +248,6 @@ class AppDataService extends ChangeNotifier {
           gaitSymmetry:  (last.features['SYM_U'] ?? 0.80).clamp(0.0, 1.0),
           walkingSpeed:  speed,
           stepCount:     last.validation.stepCount,
-        ));
-      } else {
-        result.add(GaitMetrics(
-          timestamp: day, strideLength: 0.58, stepFrequency: 98,
-          armSwingScore: 1.0, gaitSymmetry: 0.80, walkingSpeed: 0.90, stepCount: 0,
         ));
       }
     }
@@ -313,7 +299,7 @@ class AppDataService extends ChangeNotifier {
   List<Patient> _buildPatients() => [
     Patient(
       id: 'p001',
-      name: _storage.patientName.isNotEmpty ? _storage.patientName : 'Margaret Ellis',
+      name: _storage.patientName.isNotEmpty ? _storage.patientName : 'Patient',
       age: 68,
       diagnosisYear: _storage.diagnosisYear.isNotEmpty ? _storage.diagnosisYear : '2019',
       assignedClinicianId: 'c001',
@@ -342,6 +328,7 @@ class AppDataService extends ChangeNotifier {
   }
 
   bool get isBaselineComplete =>
+      SensorConfig.demoMode ||
       _accumulatedBaselineSeconds >= _baselineDuration.inSeconds;
 
   Duration get baselineTimeRemaining {
@@ -362,16 +349,31 @@ class AppDataService extends ChangeNotifier {
     unawaited(_storage.saveBaselineElapsed(_accumulatedBaselineSeconds));
   }
 
-  /// Returns null until the 24 h baseline window is complete.
-  /// The processing team will replace the body with a real computed value;
-  /// the null-until-complete contract must be preserved.
+  /// Returns null until the baseline window is complete.
+  /// Computed as the median of the earliest 20% of collected readings.
   SymptomSnapshot? getBaseline(String patientId) {
     if (!isBaselineComplete) return null;
-    // TODO: replace with real computed baseline from processing team.
+    if (_tremorHistory.isEmpty) return null;
+
+    final sampleSize = (_tremorHistory.length * 0.2).ceil().clamp(1, _tremorHistory.length);
+    final early = _tremorHistory.sublist(0, sampleSize);
+
+    final tremorScores = early.map((r) => r.tremorSeverity.toDouble()).toList()..sort();
+    final dyskinesiaScores = early.map((r) => r.dyskinesiaSeverity.toDouble()).toList()..sort();
+    final mid = sampleSize ~/ 2;
+
+    double bradyBaseline = 0.0;
+    if (_gaitHistory.isNotEmpty) {
+      final earlyGait = _gaitHistory.sublist(0, (_gaitHistory.length * 0.2).ceil().clamp(1, _gaitHistory.length));
+      final bradyScores = earlyGait.map((r) => r.bradykinesiaSeverity.toDouble()).toList()..sort();
+      bradyBaseline = bradyScores[bradyScores.length ~/ 2];
+    }
+
     return SymptomSnapshot(
       timestamp: _storage.onboardingTimestamp ?? DateTime.now(),
-      tremorScore: 0.8, bradykinesiaScore: 0.6,
-      dyskinesiaScore: 0.1, rigidityScore: 0.5,
+      tremorScore: tremorScores[mid],
+      bradykinesiaScore: bradyBaseline,
+      dyskinesiaScore: dyskinesiaScores[mid],
     );
   }
 
@@ -383,10 +385,20 @@ class AppDataService extends ChangeNotifier {
     required String patientId, required int feelingScore,
     String? notes, List<String> symptoms = const [],
   }) {
-    _checkIns.insert(0, WellbeingCheckIn(
-      date: DateTime.now(), feelingScore: feelingScore,
+    final now = DateTime.now();
+    final todayIndex = _checkIns.indexWhere((c) =>
+        c.date.year == now.year &&
+        c.date.month == now.month &&
+        c.date.day == now.day);
+    final entry = WellbeingCheckIn(
+      date: now, feelingScore: feelingScore,
       notes: notes, symptoms: symptoms,
-    ));
+    );
+    if (todayIndex >= 0) {
+      _checkIns[todayIndex] = entry;
+    } else {
+      _checkIns.insert(0, entry);
+    }
     unawaited(_storage.saveCheckIns(_checkIns));
     notifyListeners();
   }

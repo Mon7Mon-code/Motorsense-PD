@@ -27,6 +27,10 @@ class SensorConfig {
   /// Set true to stream simulated IMU data (no hardware required).
   static const bool useBleSimulator = false;
 
+  /// Set true to skip the 24-hour baseline window and show live data immediately.
+  /// Revert to false before clinical deployment.
+  static const bool demoMode = false;
+
   /// Raw hardware ODR of the LSM6DS3 (104 Hz). Used only for reference;
   /// the firmware outputs CSV at [bleCsvOdrHz], not at this rate.
   static const int xiaoLsm6ds3OdrHz = 104;

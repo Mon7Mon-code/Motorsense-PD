@@ -26,14 +26,12 @@ class SymptomSnapshot {
   final double tremorScore;      // 0.0–4.0
   final double bradykinesiaScore; // 0.0–4.0
   final double dyskinesiaScore;  // 0.0–4.0
-  final double rigidityScore;    // 0.0–4.0 (if available)
 
    SymptomSnapshot({
     required this.timestamp,
     required this.tremorScore,
     required this.bradykinesiaScore,
     required this.dyskinesiaScore,
-    required this.rigidityScore,
   });
 
   // Human-readable label for patients (no raw numbers shown)
