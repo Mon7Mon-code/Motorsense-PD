@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../services/app_data_service.dart';
 import '../../widgets/shared/shared_widgets.dart';
 import '../login_screen.dart';
+import 'patient_device_screen.dart';
 
 // ============================================================
 // SETTINGS SCREEN
@@ -160,7 +161,8 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
                       style: TextStyle(fontSize: 14)),
                   trailing: const Icon(Icons.chevron_right_rounded,
                       size: 18, color: AppTheme.neutral300),
-                  onTap: () {},
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const PatientDeviceScreen())),
                 ),
                 const Divider(height: 0),
                 ListTile(
@@ -170,7 +172,8 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
                       style: TextStyle(fontSize: 14)),
                   trailing: const Icon(Icons.chevron_right_rounded,
                       size: 18, color: AppTheme.neutral300),
-                  onTap: () {},
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const PatientDeviceScreen())),
                 ),
               ],
             ),

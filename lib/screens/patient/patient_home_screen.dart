@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/app_data_service.dart';
 import '../../theme/app_theme.dart';
 import '../../models/patient_data.dart';
+import 'patient_checkin_screen.dart';
 import 'patient_episodes_screen.dart';
 import 'patient_settings_screen.dart';
 
@@ -51,7 +52,11 @@ class PatientHomeScreen extends StatelessWidget {
                     children: [
                       Expanded(child: _NextDoseBlock(meds: meds)),
                       const SizedBox(width: 12),
-                      Expanded(child: _CheckInBlock(checkIns: checkIns)),
+                      Expanded(child: _CheckInBlock(
+                        checkIns: checkIns,
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const PatientCheckInScreen())),
+                      )),
                     ],
                   ),
                   const SizedBox(height: 22),
@@ -408,7 +413,8 @@ class _NextDoseBlock extends StatelessWidget {
 // ══ CHECK-IN BLOCK ════════════════════════════════════════════
 class _CheckInBlock extends StatelessWidget {
   final List<WellbeingCheckIn> checkIns;
-  const _CheckInBlock({required this.checkIns});
+  final VoidCallback onTap;
+  const _CheckInBlock({required this.checkIns, required this.onTap});
 
   bool get _doneToday {
     if (checkIns.isEmpty) return false;
@@ -437,7 +443,9 @@ class _CheckInBlock extends StatelessWidget {
               ? Icons.sentiment_neutral_rounded
               : Icons.sentiment_dissatisfied_rounded;
 
-      return Container(
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: bg,
@@ -468,10 +476,13 @@ class _CheckInBlock extends StatelessWidget {
                     color: color.withValues(alpha:0.6))),
           ],
         ),
+      ),
       );
     }
 
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -529,6 +540,7 @@ class _CheckInBlock extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

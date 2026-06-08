@@ -118,14 +118,59 @@ class _PatientHeaderCard extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.6),
                         fontWeight: FontWeight.w500)),
                 const Spacer(),
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'trends':
+                        tabs.animateTo(1);
+                      case 'meds':
+                        tabs.animateTo(2);
+                      case 'report':
+                        tabs.animateTo(4);
+                      case 'flag':
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Patient flagged for review'),
+                              behavior: SnackBarBehavior.floating));
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'trends',
+                        child: Row(children: [
+                          Icon(Icons.show_chart_rounded, size: 18),
+                          SizedBox(width: 10),
+                          Text('View trends'),
+                        ])),
+                    PopupMenuItem(value: 'meds',
+                        child: Row(children: [
+                          Icon(Icons.medication_rounded, size: 18),
+                          SizedBox(width: 10),
+                          Text('Medication response'),
+                        ])),
+                    PopupMenuItem(value: 'report',
+                        child: Row(children: [
+                          Icon(Icons.download_rounded, size: 18),
+                          SizedBox(width: 10),
+                          Text('Export report'),
+                        ])),
+                    PopupMenuDivider(),
+                    PopupMenuItem(value: 'flag',
+                        child: Row(children: [
+                          Icon(Icons.flag_outlined, size: 18, color: Color(0xFFD94F4F)),
+                          SizedBox(width: 10),
+                          Text('Flag for review',
+                              style: TextStyle(color: Color(0xFFD94F4F))),
+                        ])),
+                  ],
+                  child: Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.more_horiz_rounded,
+                        color: Colors.white, size: 20),
                   ),
-                  child: const Icon(Icons.more_horiz_rounded,
-                      color: Colors.white, size: 20),
                 ),
               ],
             ),
@@ -1134,7 +1179,9 @@ class _ReportsTab extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('EHR integration coming soon'),
+                      behavior: SnackBarBehavior.floating)),
                 icon: const Icon(Icons.email_outlined, size: 18),
                 label: const Text('Send to patient record'),
               ),
