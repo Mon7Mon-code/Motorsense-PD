@@ -182,10 +182,15 @@ class GaitInferenceEngine {
         : strideCV;
 
     int base;
-    if      (cvVal < cvP33) base = 1;
-    else if (cvVal < cvP66) base = 2;
-    else if (cvVal < cvP90) base = 3;
-    else                    base = 4;
+    if (cvVal < cvP33) {
+      base = 1;
+    } else if (cvVal < cvP66) {
+      base = 2;
+    } else if (cvVal < cvP90) {
+      base = 3;
+    } else {
+      base = 4;
+    }
 
     // Upgrade by 1 if arm swing is markedly reduced
     if (!armAmp.isNaN && armAmp < raP10) {

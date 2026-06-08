@@ -42,18 +42,39 @@ class _PatientCheckInScreenState extends State<PatientCheckInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_submitted) return _SubmittedView(onNewCheckIn: () => setState(() {
-      _submitted = false;
-      _selectedFeeling = null;
-      _selectedSymptoms.clear();
-      _notesController.clear();
-    }));
+    if (_submitted) {
+      return _SubmittedView(onNewCheckIn: () => setState(() {
+        _submitted = false;
+        _selectedFeeling = null;
+        _selectedSymptoms.clear();
+        _notesController.clear();
+      }));
+    }
 
     return Scaffold(
-      backgroundColor: AppTheme.neutral50,
-      appBar: AppBar(
-          title: const Text('Daily check-in'),
-          backgroundColor: AppTheme.neutral50),
+      backgroundColor: const Color(0xFFF2EDE8),
+                              appBar: AppBar(
+        backgroundColor: const Color(0xFF0F3D24),
+        foregroundColor: Colors.white,
+        title: const Text('Daily check-in',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700)),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
+          ),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
         children: [
@@ -184,7 +205,7 @@ class _FeelingTile extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: selected ? color.withOpacity(0.12) : Colors.white,
+            color: selected ? color.withValues(alpha:0.12) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selected ? color : AppTheme.neutral200,
@@ -250,7 +271,29 @@ class _SubmittedView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.neutral50,
+      backgroundColor: const Color(0xFFF2EDE8),
+                        appBar: AppBar(
+        backgroundColor: const Color(0xFF0F3D24),
+        foregroundColor: Colors.white,
+        title: const Text('Daily check-in',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700)),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(28),

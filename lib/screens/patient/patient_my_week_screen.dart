@@ -20,10 +20,28 @@ class PatientMyWeekScreen extends StatelessWidget {
     final syncAge   = svc.lastSyncAge;
 
     return Scaffold(
-      backgroundColor: AppTheme.neutral50,
-      appBar: AppBar(
-        title: const Text('My week'),
-        backgroundColor: AppTheme.neutral50,
+      backgroundColor: const Color(0xFFF2EDE8),
+                              appBar: AppBar(
+        backgroundColor: const Color(0xFF0F3D24),
+        foregroundColor: Colors.white,
+        title: const Text('My week',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700)),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
+          ),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
@@ -231,7 +249,7 @@ class _InsightTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.15), width: 0.5),
+        border: Border.all(color: color.withValues(alpha:0.15), width: 0.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,7 +309,7 @@ class _PatientLineChart extends StatelessWidget {
             barWidth: 2.5,
             dotData: FlDotData(
               show: true,
-              getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+              getDotPainter: (spot, _, _, _) => FlDotCirclePainter(
                 radius: 3,
                 color: color,
                 strokeWidth: 1.5,
@@ -300,7 +318,7 @@ class _PatientLineChart extends StatelessWidget {
             ),
             belowBarData: BarAreaData(
               show: true,
-              color: color.withOpacity(0.07),
+              color: color.withValues(alpha:0.07),
             ),
           ),
         ],

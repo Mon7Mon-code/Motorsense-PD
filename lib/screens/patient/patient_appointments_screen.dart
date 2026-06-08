@@ -17,10 +17,28 @@ class PatientAppointmentsScreen extends StatelessWidget {
       ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
     return Scaffold(
-      backgroundColor: AppTheme.neutral50,
-      appBar: AppBar(
-        title: const Text('Appointments'),
-        backgroundColor: AppTheme.neutral50,
+      backgroundColor: const Color(0xFFF2EDE8),
+                              appBar: AppBar(
+        backgroundColor: const Color(0xFF0F3D24),
+        foregroundColor: Colors.white,
+        title: const Text('Appointments',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700)),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
+          ),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
@@ -98,7 +116,7 @@ class _NextAppointmentHero extends StatelessWidget {
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.white.withValues(alpha:0.6),
                   letterSpacing: 0.3)),
           const SizedBox(height: 8),
           Text(daysLabel,
@@ -111,12 +129,12 @@ class _NextAppointmentHero extends StatelessWidget {
           Text(
             '${_formatDate(appointment.dateTime)} · ${_formatTime(appointment.dateTime)}',
             style: TextStyle(
-                fontSize: 14, color: Colors.white.withOpacity(0.8)),
+                fontSize: 14, color: Colors.white.withValues(alpha:0.8)),
           ),
           const SizedBox(height: 16),
           Container(
             height: 0.5,
-            color: Colors.white.withOpacity(0.15),
+            color: Colors.white.withValues(alpha:0.15),
           ),
           const SizedBox(height: 16),
           Row(

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
 import 'clinician_patient_list.dart';
-import 'clinician_patient_dashboard.dart';
 
 // ============================================================
 // CLINICIAN SHELL

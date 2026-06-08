@@ -1,570 +1,524 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/app_data_service.dart';
 import '../../theme/app_theme.dart';
 import '../../models/patient_data.dart';
-import '../../widgets/shared/shared_widgets.dart';
-import 'patient_checkin_screen.dart';
-import 'patient_device_screen.dart';
-import '../login_screen.dart';
+import 'patient_episodes_screen.dart';
+import 'patient_settings_screen.dart';
 
 class PatientHomeScreen extends StatelessWidget {
   const PatientHomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final svc = Provider.of<AppDataService>(context);
-    const patientId = 'p001';
-    final patient  = svc.getPatient(patientId);
-    final snapshot = svc.getLatestSnapshot(patientId);
-    final device   = svc.getDeviceStatus(patientId);
-    final checkIns = svc.getCheckIns(patientId);
-    final state    = svc.sensorDataState;
-    final now = DateTime.now();
-    final hour = now.hour;
-    final greeting = hour < 12
-        ? 'Good morning'
-        : hour < 18
-            ? 'Good afternoon'
-            : 'Good evening';
+    final svc        = Provider.of<AppDataService>(context);
+    final snapshot   = svc.getLatestSnapshot('p001');
+    final device     = svc.getDeviceStatus('p001');
+    final checkIns   = svc.getCheckIns('p001');
+    final meds       = svc.getMedications('p001');
+    final firstName  = svc.patientName.split(' ').first;
+    final hour       = DateTime.now().hour;
+    final greeting   = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
     return Scaffold(
-      backgroundColor: AppTheme.neutral50,
-      body: CustomScrollView(
-        slivers: [
-          // App bar
-          SliverAppBar(
-            backgroundColor: AppTheme.neutral50,
-            expandedHeight: 0,
-            pinned: true,
-            title: Image.asset('assets/logo.png',
-                height: 26,
-                errorBuilder: (_, __, ___) => Row(
-                  children: [
-                    Icon(Icons.monitor_heart_outlined,
-                        color: AppTheme.teal600, size: 22),
-                    const SizedBox(width: 8),
-                    Text('ParkinsonsTracker',
-                        style: Theme.of(context).textTheme.titleMedium),
-                  ],
-                )),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.watch_outlined, size: 22),
-                color: AppTheme.neutral700,
-                onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const PatientDeviceScreen())),
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout_rounded, size: 20),
-                color: AppTheme.neutral700,
-                onPressed: () {
-                  context.read<AppDataService>().logout();
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  );
-                },
-              ),
-              const SizedBox(width: 4),
-            ],
-          ),
+      backgroundColor: const Color(0xFFF2EDE8),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
 
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // Greeting
-                Text('$greeting,',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(color: AppTheme.neutral500)),
-                Text(patient?.name.split(' ').first ?? 'Margaret',
-                    style: Theme.of(context)
-                        .textTheme
-                        .displayMedium
-                        ?.copyWith(height: 1.1)),
-                const SizedBox(height: 16),
+            // ══ HERO ══════════════════════════════════════════
+            _Hero(
+              greeting:  greeting,
+              name:      firstName,
+              snapshot:  snapshot,
+              device:    device,
+              onSettings: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => PatientSettingsScreen())),
+              onHistory:  () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => PatientEpisodesScreen())),
+            ),
 
-                // Device status
-                DeviceStatusBar(
-                  isConnected: device.isConnected,
-                  batteryPercent: device.batteryPercent,
-                  lastSync: device.lastSyncTime,
-                  isPatientView: true,
-                ),
+            // ══ BODY ══════════════════════════════════════════
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 22, 18, 110),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
 
-                const SizedBox(height: 24),
-
-                // Baseline progress card — visible during the baseline window
-                // (both collecting and paused states)
-                if (state == SensorDataState.collectingBaseline ||
-                    state == SensorDataState.baselinePaused) ...[
-                  _BaselineProgressCard(svc: svc),
-                  const SizedBox(height: 16),
-                ],
-
-                // Today's readings — sensor-derived section
-                const SectionHeader(title: 'Today\'s readings'),
-                SensorCardShell(
-                  state: svc.sensorDataState,
-                  lastSyncAge: svc.lastSyncAge,
-                  child: snapshot != null
-                      ? _WellnessCard(snapshot: snapshot)
-                      : const SizedBox.shrink(),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Next medication reminder — always shown (user-entered data)
-                _NextDoseCard(svc: svc, patientId: patientId),
-
-                const SizedBox(height: 16),
-
-                // Today's check-in prompt — always shown (user-entered data)
-                _CheckInPromptCard(checkIns: checkIns),
-
-                const SizedBox(height: 24),
-
-                // Today's symptoms — sensor-derived, gated
-                const SectionHeader(title: 'How you\'re moving today'),
-                SensorCardShell(
-                  state: svc.sensorDataState,
-                  lastSyncAge: svc.lastSyncAge,
-                  child: snapshot != null
-                      ? AppCard(
-                          child: Column(
-                            children: [
-                              ScoreBar(
-                                  label: 'Tremor',
-                                  score: snapshot.tremorScore,
-                                  showLabel: true),
-                              const SizedBox(height: 14),
-                              ScoreBar(
-                                  label: 'Slowness of movement',
-                                  score: snapshot.bradykinesiaScore,
-                                  showLabel: true),
-                              const SizedBox(height: 14),
-                              ScoreBar(
-                                  label: 'Involuntary movements',
-                                  score: snapshot.dyskinesiaScore,
-                                  showLabel: true),
-                            ],
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-
-                const SizedBox(height: 24),
-
-                // 7-day mood summary
-                const SectionHeader(title: 'This week'),
-                _WeekMoodRow(checkIns: checkIns),
-
-                const SizedBox(height: 24),
-
-                // Reassurance footer
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.teal50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.teal100, width: 0.5),
-                  ),
-                  child: Row(
+                  // Next dose + check-in row
+                  Row(
                     children: [
-                      const Icon(Icons.check_circle_outline_rounded,
-                          color: AppTheme.teal600, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Your device is collecting data. Your care team can see your progress.',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: AppTheme.teal700,
-                              height: 1.4),
-                        ),
-                      ),
+                      Expanded(child: _NextDoseBlock(meds: meds)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _CheckInBlock(checkIns: checkIns)),
                     ],
                   ),
-                ),
-              ]),
+                  const SizedBox(height: 22),
+
+                  // Section title
+                  _Title('How you\'re moving'),
+                  const SizedBox(height: 12),
+
+                  // Symptom blocks — big bold cards
+                  if (snapshot != null) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SymptomBlock(
+                            label: 'Tremor',
+                            value: snapshot.tremorLabel,
+                            score: snapshot.tremorScore,
+                            icon:  Icons.vibration_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _SymptomBlock(
+                            label: 'Slowness',
+                            value: snapshot.bradykinesiaLabel,
+                            score: snapshot.bradykinesiaScore,
+                            icon:  Icons.directions_walk_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _SymptomBlock(
+                            label: 'Involuntary',
+                            value: snapshot.dyskinesiaLabel,
+                            score: snapshot.dyskinesiaScore,
+                            icon:  Icons.swap_horiz_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _UpdatedLabel(snapshot.timestamp),
+                  ],
+
+                  const SizedBox(height: 22),
+
+                  // This week
+                  _Title('This week'),
+                  const SizedBox(height: 12),
+                  _WeekCard(checkIns: checkIns),
+
+                  const SizedBox(height: 22),
+
+                  // Reassurance
+                  _ReassuranceBar(isConnected: device.isConnected),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-// --- Wellness hero card -------------------------------------
-class _WellnessCard extends StatelessWidget {
-  final SymptomSnapshot snapshot;
-  const _WellnessCard({required this.snapshot});
+// ══ HERO ═════════════════════════════════════════════════════
+class _Hero extends StatelessWidget {
+  final String greeting;
+  final String name;
+  final SymptomSnapshot? snapshot;
+  final DeviceStatus device;
+  final VoidCallback onSettings;
+  final VoidCallback onHistory;
 
-  String get _overallLabel {
-    final w = snapshot.overallWellness;
-    if (w > 0.75) return 'You\'re doing well today';
-    if (w > 0.5) return 'A fairly comfortable day';
-    if (w > 0.3) return 'A harder day — that\'s okay';
+  const _Hero({
+    required this.greeting, required this.name,
+    required this.snapshot, required this.device,
+    required this.onSettings, required this.onHistory,
+  });
+
+  double get _wellness => snapshot?.overallWellness ?? 0.85;
+
+  String get _wellnessLabel {
+    if (_wellness > 0.80) return 'Doing well today';
+    if (_wellness > 0.60) return 'A comfortable day';
+    if (_wellness > 0.40) return 'A harder day';
     return 'A challenging day';
-  }
-
-  Color get _cardColor {
-    final w = snapshot.overallWellness;
-    if (w > 0.75) return AppTheme.teal50;
-    if (w > 0.5) return AppTheme.teal50;
-    if (w > 0.3) return AppTheme.amber50;
-    return AppTheme.red50.withOpacity(0.5);
-  }
-
-  Color get _accentColor {
-    final w = snapshot.overallWellness;
-    if (w > 0.5) return AppTheme.teal600;
-    if (w > 0.3) return AppTheme.amber600;
-    return AppTheme.red600;
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-            color: _accentColor.withOpacity(0.15), width: 0.5),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: [0.0, 0.6, 1.0],
+          colors: [
+            Color(0xFF0F3D24),
+            Color(0xFF1A6B3E),
+            Color(0xFF28A05A),
+          ],
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft:  Radius.circular(36),
+          bottomRight: Radius.circular(36),
+        ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Today\'s overview',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: _accentColor.withOpacity(0.7),
-                        letterSpacing: 0.3)),
-                const SizedBox(height: 6),
-                Text(_overallLabel,
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: _accentColor,
-                        height: 1.2)),
-                const SizedBox(height: 8),
-                Text(
-                  'Last updated ${_timeAgo(snapshot.timestamp)}',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: _accentColor.withOpacity(0.6)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          SizedBox(
-            width: 64,
-            height: 64,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned.fill(
-                  child: CircularProgressIndicator(
-                    value: snapshot.overallWellness,
-                    strokeWidth: 5,
-                    backgroundColor: _accentColor.withOpacity(0.12),
-                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
-                    strokeCap: StrokeCap.round,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 14, 22, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              // Top bar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.monitor_heart_outlined,
+                        color: Colors.white54, size: 16),
+                    const SizedBox(width: 6),
+                    Text('ParkinsonsTracker',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha:0.55),
+                            fontWeight: FontWeight.w500)),
+                  ]),
+                  Row(children: [
+                    _Btn(icon: Icons.history_rounded,   onTap: onHistory),
+                    const SizedBox(width: 8),
+                    _Btn(icon: Icons.settings_outlined, onTap: onSettings),
+                  ]),
+                ],
+              ),
+
+              const SizedBox(height: 22),
+
+              // Name + ring
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(greeting,
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha:0.6))),
+                        const SizedBox(height: 2),
+                        Text(name,
+                            style: const TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                height: 1.05,
+                                letterSpacing: -1.0)),
+                        const SizedBox(height: 10),
+                        // Wellness label pill
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha:0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(_wellnessLabel,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+
+                  // Ring
+                  SizedBox(
+                    width: 86,
+                    height: 86,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 86, height: 86,
+                          child: CircularProgressIndicator(
+                            value: _wellness,
+                            strokeWidth: 7,
+                            backgroundColor: Colors.white.withValues(alpha:0.15),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.white),
+                            strokeCap: StrokeCap.round,
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${(_wellness * 100).round()}',
+                              style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  height: 1.0),
+                            ),
+                            Text('/100',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.white.withValues(alpha:0.55),
+                                    fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 22),
+
+              // Device pill
+              Row(children: [
+                Container(
+                  width: 8, height: 8,
+                  decoration: BoxDecoration(
+                    color: device.isConnected
+                        ? const Color(0xFF4CD97B)
+                        : Colors.white30,
+                    shape: BoxShape.circle,
+                    boxShadow: device.isConnected ? [
+                      BoxShadow(
+                        color: const Color(0xFF4CD97B).withValues(alpha:0.6),
+                        blurRadius: 6, spreadRadius: 1,
+                      ),
+                    ] : null,
                   ),
                 ),
+                const SizedBox(width: 8),
                 Text(
-                  '${(snapshot.overallWellness * 100).round()}',
+                  device.isConnected
+                      ? 'Device active  ·  syncing live'
+                      : 'Device not connected',
                   style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: _accentColor),
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha:0.7),
+                      fontWeight: FontWeight.w500),
                 ),
-              ],
-            ),
+              ]),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
-
-  String _timeAgo(DateTime t) {
-    final diff = DateTime.now().difference(t);
-    if (diff.inMinutes < 2) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-    return '${diff.inHours}h ago';
-  }
 }
 
-// --- Next dose card -----------------------------------------
-class _NextDoseCard extends StatelessWidget {
-  final AppDataService svc;
-  final String patientId;
-  const _NextDoseCard({required this.svc, required this.patientId});
+class _Btn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _Btn({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final meds = svc.getMedications(patientId);
-    if (meds.isEmpty) return const SizedBox.shrink();
-    final med = meds.first;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34, height: 34,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha:0.13),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Icon(icon, color: Colors.white70, size: 17),
+      ),
+    );
+  }
+}
 
-    return AppCard(
-      child: Row(
+// ══ NEXT DOSE BLOCK ══════════════════════════════════════════
+class _NextDoseBlock extends StatelessWidget {
+  final List<MedicationEntry> meds;
+  const _NextDoseBlock({required this.meds});
+
+  @override
+  Widget build(BuildContext context) {
+    if (meds.isEmpty) return const SizedBox.shrink();
+    final med      = meds.first;
+    final nextTime = med.scheduledTimes.length > 1
+        ? med.scheduledTimes[1]
+        : med.scheduledTimes.first;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8EC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFE5A0), width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFE9A020).withValues(alpha:0.12),
+            blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 38, height: 38,
             decoration: BoxDecoration(
-              color: AppTheme.amber50,
-              borderRadius: BorderRadius.circular(12),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFD4820F), Color(0xFFE9A020)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(11),
             ),
-            child: const Icon(Icons.medication_outlined,
-                color: AppTheme.amber600, size: 22),
+            child: const Icon(Icons.medication_rounded,
+                color: Colors.white, size: 20),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Next dose due',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.neutral500)),
-                const SizedBox(height: 2),
-                Text(
-                    '${med.name} ${med.dose} at ${med.scheduledTimes.isNotEmpty ? med.scheduledTimes[1] : "—"}',
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.neutral900)),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.amber50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.amber100, width: 0.5),
-            ),
-            child: Text('12:30',
-                style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.amber600)),
-          ),
+          const SizedBox(height: 10),
+          const Text('Next dose',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFB8690F),
+                  letterSpacing: 0.3)),
+          const SizedBox(height: 2),
+          Text(nextTime,
+              style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF92530A),
+                  letterSpacing: -0.5)),
+          Text(med.name.split('/').first.trim(),
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFFB8690F))),
         ],
       ),
     );
   }
 }
 
-// --- Check-in prompt ----------------------------------------
-class _CheckInPromptCard extends StatelessWidget {
+// ══ CHECK-IN BLOCK ════════════════════════════════════════════
+class _CheckInBlock extends StatelessWidget {
   final List<WellbeingCheckIn> checkIns;
-  const _CheckInPromptCard({required this.checkIns});
+  const _CheckInBlock({required this.checkIns});
 
   bool get _doneToday {
     if (checkIns.isEmpty) return false;
-    final last = checkIns.first.date;
     final now = DateTime.now();
-    return last.year == now.year &&
-        last.month == now.month &&
-        last.day == now.day;
-  }
-
-  void _openCheckIn(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const PatientCheckInScreen()),
-    );
+    final last = checkIns.first.date;
+    return last.year == now.year && last.month == now.month && last.day == now.day;
   }
 
   @override
   Widget build(BuildContext context) {
     if (_doneToday) {
-      return GestureDetector(
-        onTap: () => _openCheckIn(context),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.teal50,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.check_rounded, color: AppTheme.teal500, size: 18),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text("Today's check-in done · tap to edit",
-                    style: TextStyle(fontSize: 13, color: AppTheme.teal700)),
-              ),
-              const Icon(Icons.chevron_right_rounded,
-                  size: 16, color: AppTheme.teal400),
-            ],
-          ),
+      final score = checkIns.first.feelingScore;
+      final color = score == 3
+          ? const Color(0xFF1A6B3E)
+          : score == 2
+              ? const Color(0xFFB8690F)
+              : const Color(0xFFAB2828);
+      final bg = score == 3
+          ? const Color(0xFFEEF9F3)
+          : score == 2
+              ? const Color(0xFFFFF8EC)
+              : const Color(0xFFFDF0F0);
+      final icon = score == 3
+          ? Icons.sentiment_satisfied_alt_rounded
+          : score == 2
+              ? Icons.sentiment_neutral_rounded
+              : Icons.sentiment_dissatisfied_rounded;
+
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: color.withValues(alpha:0.2), width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 10),
+            Text('Feeling',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: color.withValues(alpha:0.7),
+                    letterSpacing: 0.3)),
+            const SizedBox(height: 2),
+            Text(checkIns.first.feelingLabel,
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: color)),
+            Text('Today\'s check-in',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: color.withValues(alpha:0.6))),
+          ],
         ),
       );
     }
 
-    return AppCard(
-      backgroundColor: AppTheme.teal600,
-      onTap: () => _openCheckIn(context),
-      child: Row(
-        children: [
-          const Icon(Icons.sentiment_satisfied_alt_outlined,
-              color: Colors.white, size: 24),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('How are you feeling today?',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
-                Text('Tap to do your daily check-in',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.white70)),
-              ],
-            ),
-          ),
-          const Icon(Icons.arrow_forward_ios_rounded,
-              size: 14, color: Colors.white60),
-        ],
-      ),
-    );
-  }
-}
-
-// --- Baseline progress card ---------------------------------
-class _BaselineProgressCard extends StatefulWidget {
-  final AppDataService svc;
-  const _BaselineProgressCard({required this.svc});
-
-  @override
-  State<_BaselineProgressCard> createState() => _BaselineProgressCardState();
-}
-
-class _BaselineProgressCardState extends State<_BaselineProgressCard> {
-  Timer? _timer;
-  bool _dismissed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  String get _remainingText {
-    final r = widget.svc.baselineTimeRemaining;
-    final h = r.inHours;
-    final m = r.inMinutes % 60;
-    if (h > 0) return '~${h}h ${m}m remaining';
-    return '~${m}m remaining';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_dismissed) return const SizedBox.shrink();
-    final progress = widget.svc.baselineProgress;
-    final paused   = widget.svc.sensorDataState == SensorDataState.baselinePaused;
-
-    final cardColor   = paused ? AppTheme.neutral50  : AppTheme.teal50;
-    final borderColor = paused ? AppTheme.neutral200  : AppTheme.teal100;
-    final iconColor   = paused ? AppTheme.neutral400  : AppTheme.teal600;
-    final labelColor  = paused ? AppTheme.neutral600  : AppTheme.teal700;
-    final barColor    = paused ? AppTheme.neutral300  : AppTheme.teal500;
-    final barBg       = paused ? AppTheme.neutral200  : AppTheme.teal100;
-    final subColor    = paused ? AppTheme.neutral400  : AppTheme.teal600;
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: 0.5),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1A6B3E), Color(0xFF28A05A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1A6B3E).withValues(alpha:0.3),
+            blurRadius: 12, offset: const Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                paused ? Icons.pause_circle_outline_rounded : Icons.timeline_rounded,
-                color: iconColor,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  paused ? 'Baseline paused' : 'Establishing your baseline',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: labelColor),
-                ),
-              ),
-              GestureDetector(
-                onTap: () => setState(() => _dismissed = true),
-                child: Icon(Icons.close_rounded, size: 18, color: iconColor),
-              ),
-            ],
+          Container(
+            width: 38, height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha:0.2),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: const Icon(
+                Icons.sentiment_satisfied_alt_outlined,
+                color: Colors.white, size: 20),
           ),
           const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor: barBg,
-              valueColor: AlwaysStoppedAnimation<Color>(barColor),
-            ),
-          ),
+          const Text('Check-in',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                  letterSpacing: 0.3)),
+          const SizedBox(height: 2),
+          const Text('How are\nyou?',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  height: 1.1)),
           const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              if (paused)
-                Row(
-                  children: [
-                    Icon(Icons.watch_off_outlined, size: 12, color: subColor),
-                    const SizedBox(width: 4),
-                    Text('Connect device to resume',
-                        style: TextStyle(fontSize: 12, color: subColor)),
-                  ],
-                )
-              else
-                Text(_remainingText,
-                    style: TextStyle(fontSize: 12, color: subColor)),
-              Text(
-                '${(progress * 100).round()}% complete',
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha:0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text('Tap to log',
                 style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: subColor),
-              ),
-            ],
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -572,66 +526,253 @@ class _BaselineProgressCardState extends State<_BaselineProgressCard> {
   }
 }
 
-// --- 7-day mood dots ----------------------------------------
-class _WeekMoodRow extends StatelessWidget {
+// ══ SYMPTOM BLOCK ════════════════════════════════════════════
+class _SymptomBlock extends StatelessWidget {
+  final String label;
+  final String value;
+  final double score;
+  final IconData icon;
+  const _SymptomBlock({
+    required this.label, required this.value,
+    required this.score, required this.icon,
+  });
+
+  Color get _accent {
+    if (score < 0.5) return const Color(0xFF1A6B3E);
+    if (score < 1.5) return const Color(0xFFB8690F);
+    if (score < 2.5) return const Color(0xFFD04A0A);
+    return const Color(0xFFAB2828);
+  }
+
+  Color get _bg {
+    if (score < 0.5) return const Color(0xFFEEF9F3);
+    if (score < 1.5) return const Color(0xFFFFF8EC);
+    if (score < 2.5) return const Color(0xFFFFF3EC);
+    return const Color(0xFFFDF0F0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: _bg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _accent.withValues(alpha:0.15), width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: _accent.withValues(alpha:0.08),
+            blurRadius: 8, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: _accent, size: 20),
+          const SizedBox(height: 6),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: _accent,
+                  letterSpacing: -0.3)),
+          const SizedBox(height: 1),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  color: _accent.withValues(alpha:0.7),
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: score == 0 ? 0.04 : score / 4.0,
+              minHeight: 4,
+              backgroundColor: _accent.withValues(alpha:0.12),
+              valueColor: AlwaysStoppedAnimation<Color>(_accent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══ UPDATED LABEL ════════════════════════════════════════════
+class _UpdatedLabel extends StatelessWidget {
+  final DateTime timestamp;
+  const _UpdatedLabel(this.timestamp);
+
+  String _timeAgo() {
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inMinutes < 2) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Row(children: [
+        const Icon(Icons.access_time_rounded,
+            size: 11, color: AppTheme.neutral400),
+        const SizedBox(width: 4),
+        Text('Updated ${_timeAgo()}',
+            style: const TextStyle(
+                fontSize: 11, color: AppTheme.neutral400)),
+      ]),
+    );
+  }
+}
+
+// ══ TITLE ════════════════════════════════════════════════════
+class _Title extends StatelessWidget {
+  final String text;
+  const _Title(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1C1917),
+            letterSpacing: -0.3));
+  }
+}
+
+// ══ WEEK CARD ════════════════════════════════════════════════
+class _WeekCard extends StatelessWidget {
   final List<WellbeingCheckIn> checkIns;
-  const _WeekMoodRow({required this.checkIns});
+  const _WeekCard({required this.checkIns});
 
   @override
   Widget build(BuildContext context) {
     final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    return AppCard(
+    final now  = DateTime.now();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1C1917).withValues(alpha:0.06),
+            blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(7, (i) {
-          final checkIn = i < checkIns.length ? checkIns[checkIns.length - 1 - i] : null;
-          final score = checkIn?.feelingScore;
-          final color = score == null
-              ? AppTheme.neutral100
-              : score == 3
-                  ? AppTheme.teal400
-                  : score == 2
-                      ? AppTheme.amber100
-                      : AppTheme.red50;
-          final dotColor = score == null
-              ? AppTheme.neutral300
-              : score == 3
-                  ? AppTheme.teal600
-                  : score == 2
-                      ? AppTheme.amber400
-                      : AppTheme.red400;
+          final checkIn = i < checkIns.length
+              ? checkIns[checkIns.length - 1 - i]
+              : null;
+          final score   = checkIn?.feelingScore;
+          final dayIdx  = (now.weekday - 1 - (6 - i)) % 7;
+          final isToday = i == 6;
 
-          return Column(
-            children: [
-              Text(days[(DateTime.now().weekday - 1 - (6 - i)) % 7],
-                  style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.neutral500,
-                      fontWeight: FontWeight.w500)),
-              const SizedBox(height: 6),
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  score == null
-                      ? Icons.remove
-                      : score == 3
-                          ? Icons.sentiment_satisfied_alt_rounded
-                          : score == 2
-                              ? Icons.sentiment_neutral_rounded
-                              : Icons.sentiment_dissatisfied_rounded,
-                  size: 18,
-                  color: dotColor,
-                ),
+          final bg = score == null
+              ? const Color(0xFFF0EBE5)
+              : score == 3
+                  ? const Color(0xFFD4F2E2)
+                  : score == 2
+                      ? const Color(0xFFFADFA0)
+                      : const Color(0xFFF8DADA);
+
+          final iconColor = score == null
+              ? const Color(0xFFC4BDB8)
+              : score == 3
+                  ? const Color(0xFF1A6B3E)
+                  : score == 2
+                      ? const Color(0xFFB8690F)
+                      : const Color(0xFFAB2828);
+
+          final icon = score == null
+              ? Icons.remove
+              : score == 3
+                  ? Icons.sentiment_satisfied_alt_rounded
+                  : score == 2
+                      ? Icons.sentiment_neutral_rounded
+                      : Icons.sentiment_dissatisfied_rounded;
+
+          return Column(children: [
+            Text(
+              days[dayIdx],
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
+                  color: isToday
+                      ? const Color(0xFF1A6B3E)
+                      : const Color(0xFFA8A29E)),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: bg,
+                shape: BoxShape.circle,
+                border: isToday
+                    ? Border.all(
+                        color: const Color(0xFF2D9E63), width: 2)
+                    : null,
               ),
-            ],
-          );
+              child: Icon(icon, size: 19, color: iconColor),
+            ),
+          ]);
         }),
       ),
+    );
+  }
+}
+
+// ══ REASSURANCE BAR ══════════════════════════════════════════
+class _ReassuranceBar extends StatelessWidget {
+  final bool isConnected;
+  const _ReassuranceBar({required this.isConnected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        color: isConnected
+            ? const Color(0xFFEEF9F3)
+            : const Color(0xFFF0EBE5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isConnected
+              ? const Color(0xFF2D9E63).withValues(alpha:0.25)
+              : const Color(0xFFC4BDB8),
+          width: 0.5,
+        ),
+      ),
+      child: Row(children: [
+        Icon(
+          isConnected
+              ? Icons.check_circle_outline_rounded
+              : Icons.info_outline_rounded,
+          size: 18,
+          color: isConnected
+              ? const Color(0xFF1A6B3E)
+              : const Color(0xFFA8A29E),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            isConnected
+                ? 'Device collecting data · care team can see your progress'
+                : 'Device not connected — open Device settings to reconnect',
+            style: TextStyle(
+                fontSize: 12,
+                color: isConnected
+                    ? const Color(0xFF1A6B3E)
+                    : const Color(0xFF78716C),
+                height: 1.4),
+          ),
+        ),
+      ]),
     );
   }
 }
