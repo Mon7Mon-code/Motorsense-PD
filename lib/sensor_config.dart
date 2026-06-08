@@ -29,7 +29,7 @@ class SensorConfig {
 
   /// Set true to skip the 24-hour baseline window and show live data immediately.
   /// Revert to false before clinical deployment.
-  static const bool demoMode = false;
+  static const bool demoMode = true;
 
   /// Raw hardware ODR of the LSM6DS3 (104 Hz). Used only for reference;
   /// the firmware outputs CSV at [bleCsvOdrHz], not at this rate.
