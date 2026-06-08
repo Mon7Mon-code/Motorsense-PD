@@ -53,8 +53,12 @@ class AppDataService extends ChangeNotifier {
   bool    _isClinicianMode = false;
   bool    get isClinicianMode      => _isClinicianMode;
   String? get currentUserId        => _currentUserId;
-  bool    get isOnboardingComplete => _storage.isOnboardingComplete;
+  bool    get isOnboardingComplete => _storage.isOnboardingComplete || SensorConfig.demoMode;
   bool    get hasRealSensorData    => _latestTremor != null;
+
+  /// Patient display name — used by patient home screen header.
+  String get patientName =>
+      _storage.patientName.isNotEmpty ? _storage.patientName : 'Margaret';
 
   /// How long ago the last real sensor reading arrived. Null if never.
   Duration? get lastSyncAge => _latestTremor == null
@@ -62,6 +66,7 @@ class AppDataService extends ChangeNotifier {
       : DateTime.now().difference(_latestTremor!.timestamp);
 
   SensorDataState get sensorDataState {
+    if (SensorConfig.demoMode) return SensorDataState.live;
     final ble = bleService.status;
     if (ble == BleStatus.scanning || ble == BleStatus.connecting) {
       return SensorDataState.connecting;
@@ -156,6 +161,14 @@ class AppDataService extends ChangeNotifier {
 
   // --- Device ------------------------------------------------
   DeviceStatus getDeviceStatus(String patientId) {
+    if (SensorConfig.demoMode) {
+      return DeviceStatus(
+        isConnected:    true,
+        batteryPercent: 78,
+        lastSyncTime:   DateTime.now().subtract(const Duration(minutes: 3)),
+        isWorn:         true,
+      );
+    }
     return DeviceStatus(
       isConnected:    bleService.isActive,
       batteryPercent: bleService.batteryPercent,
@@ -166,6 +179,7 @@ class AppDataService extends ChangeNotifier {
 
   // --- Symptom snapshots -------------------------------------
   SymptomSnapshot? getLatestSnapshot(String patientId) {
+    if (SensorConfig.demoMode) return _demoSnapshot;
     if (_latestTremor == null) return null;
     return SymptomSnapshot(
       timestamp:         _latestTremor!.timestamp,
@@ -181,6 +195,7 @@ class AppDataService extends ChangeNotifier {
   }
 
   List<SymptomSnapshot> getWeeklySnapshots(String patientId) {
+    if (SensorConfig.demoMode) return _demoWeeklySnapshots;
     if (_tremorHistory.isEmpty) return [];
     final now    = DateTime.now();
     final result = <SymptomSnapshot>[];
@@ -211,6 +226,7 @@ class AppDataService extends ChangeNotifier {
   }
 
   GaitMetrics? getLatestGait(String patientId) {
+    if (SensorConfig.demoMode) return _demoGait;
     final r = _latestGait ?? gaitPipeline.latestResult;
     if (r == null) return null;
     final cad   = r.cadenceStepsPerMin ?? 0.0;
@@ -227,6 +243,7 @@ class AppDataService extends ChangeNotifier {
   }
 
   List<GaitMetrics> getWeeklyGait(String patientId) {
+    if (SensorConfig.demoMode) return _demoWeeklyGait;
     if (_gaitHistory.isEmpty) return [];
     final now    = DateTime.now();
     final result = <GaitMetrics>[];
@@ -256,6 +273,7 @@ class AppDataService extends ChangeNotifier {
 
   // --- Medication response -----------------------------------
   List<MedicationResponsePoint> getMedicationResponse(String patientId) {
+    if (SensorConfig.demoMode) return _demoMedicationResponse;
     final meds = getMedications(patientId);
     if (meds.isEmpty || _tremorHistory.length < 5) return [];
     final med    = meds.first;
@@ -352,6 +370,7 @@ class AppDataService extends ChangeNotifier {
   /// Returns null until the baseline window is complete.
   /// Computed as the median of the earliest 20% of collected readings.
   SymptomSnapshot? getBaseline(String patientId) {
+    if (SensorConfig.demoMode) return _demoBaseline;
     if (!isBaselineComplete) return null;
     if (_tremorHistory.isEmpty) return null;
 
@@ -379,7 +398,10 @@ class AppDataService extends ChangeNotifier {
 
   // --- Check-ins (persisted) ---------------------------------
   final List<WellbeingCheckIn> _checkIns = [];
-  List<WellbeingCheckIn> getCheckIns(String patientId) => _checkIns;
+  List<WellbeingCheckIn> getCheckIns(String patientId) {
+    if (SensorConfig.demoMode) return _demoCheckIns;
+    return _checkIns;
+  }
 
   void logCheckIn({
     required String patientId, required int feelingScore,
@@ -432,6 +454,94 @@ class AppDataService extends ChangeNotifier {
     _MedBase(id: 'm002', name: 'Pramipexole', dose: '0.5mg',
         scheduledTimes: ['08:00', '20:00'], color: '#185FA5'),
   ];
+
+  // ── DEMO DATA ────────────────────────────────────────────────────────────────
+  // All values below are used when SensorConfig.demoMode == true.
+  // They represent a realistic patient profile after ~3 months of monitoring.
+
+  static final _demoSnapshot = SymptomSnapshot(
+    timestamp:         DateTime(2026, 6, 8, 14, 18),
+    tremorScore:       1.2,   // mild
+    bradykinesiaScore: 1.8,   // mild-moderate
+    dyskinesiaScore:   0.6,   // minimal
+    rigidityScore:     1.4,   // mild (not hardware-measured; demo only)
+  );
+
+  static final _demoBaseline = SymptomSnapshot(
+    timestamp:         DateTime(2026, 3, 10, 9, 0),
+    tremorScore:       1.0,
+    bradykinesiaScore: 1.5,
+    dyskinesiaScore:   0.4,
+    rigidityScore:     1.2,
+  );
+
+  static List<SymptomSnapshot> get _demoWeeklySnapshots {
+    final base = DateTime(2026, 6, 8);
+    return [
+      SymptomSnapshot(timestamp: base.subtract(const Duration(days: 6)), tremorScore: 1.5, bradykinesiaScore: 2.0, dyskinesiaScore: 0.8, rigidityScore: 1.6),
+      SymptomSnapshot(timestamp: base.subtract(const Duration(days: 5)), tremorScore: 1.3, bradykinesiaScore: 1.9, dyskinesiaScore: 0.6, rigidityScore: 1.4),
+      SymptomSnapshot(timestamp: base.subtract(const Duration(days: 4)), tremorScore: 1.6, bradykinesiaScore: 2.1, dyskinesiaScore: 0.9, rigidityScore: 1.7),
+      SymptomSnapshot(timestamp: base.subtract(const Duration(days: 3)), tremorScore: 1.1, bradykinesiaScore: 1.7, dyskinesiaScore: 0.5, rigidityScore: 1.3),
+      SymptomSnapshot(timestamp: base.subtract(const Duration(days: 2)), tremorScore: 1.4, bradykinesiaScore: 1.8, dyskinesiaScore: 0.7, rigidityScore: 1.5),
+      SymptomSnapshot(timestamp: base.subtract(const Duration(days: 1)), tremorScore: 1.2, bradykinesiaScore: 1.6, dyskinesiaScore: 0.5, rigidityScore: 1.3),
+      SymptomSnapshot(timestamp: base,                                    tremorScore: 1.2, bradykinesiaScore: 1.8, dyskinesiaScore: 0.6, rigidityScore: 1.4),
+    ];
+  }
+
+  static final _demoGait = GaitMetrics(
+    timestamp:     DateTime(2026, 6, 8, 14, 15),
+    strideLength:  1.18,
+    stepFrequency: 97.0,
+    armSwingScore: 1.8,
+    gaitSymmetry:  0.82,
+    walkingSpeed:  1.14,
+    stepCount:     4231,
+  );
+
+  static List<GaitMetrics> get _demoWeeklyGait {
+    final base = DateTime(2026, 6, 8);
+    return [
+      GaitMetrics(timestamp: base.subtract(const Duration(days: 6)), strideLength: 1.12, stepFrequency: 94.0, armSwingScore: 2.0, gaitSymmetry: 0.78, walkingSpeed: 1.08, stepCount: 3800),
+      GaitMetrics(timestamp: base.subtract(const Duration(days: 5)), strideLength: 1.15, stepFrequency: 96.0, armSwingScore: 1.9, gaitSymmetry: 0.80, walkingSpeed: 1.10, stepCount: 4100),
+      GaitMetrics(timestamp: base.subtract(const Duration(days: 4)), strideLength: 1.10, stepFrequency: 93.0, armSwingScore: 2.1, gaitSymmetry: 0.76, walkingSpeed: 1.05, stepCount: 3600),
+      GaitMetrics(timestamp: base.subtract(const Duration(days: 3)), strideLength: 1.20, stepFrequency: 98.0, armSwingScore: 1.7, gaitSymmetry: 0.84, walkingSpeed: 1.16, stepCount: 4500),
+      GaitMetrics(timestamp: base.subtract(const Duration(days: 2)), strideLength: 1.17, stepFrequency: 97.0, armSwingScore: 1.8, gaitSymmetry: 0.82, walkingSpeed: 1.13, stepCount: 4200),
+      GaitMetrics(timestamp: base.subtract(const Duration(days: 1)), strideLength: 1.19, stepFrequency: 97.0, armSwingScore: 1.7, gaitSymmetry: 0.83, walkingSpeed: 1.15, stepCount: 4350),
+      GaitMetrics(timestamp: base,                                    strideLength: 1.18, stepFrequency: 97.0, armSwingScore: 1.8, gaitSymmetry: 0.82, walkingSpeed: 1.14, stepCount: 4231),
+    ];
+  }
+
+  static List<MedicationResponsePoint> get _demoMedicationResponse {
+    final base = DateTime(2026, 6, 8, 7, 30);
+    return List.generate(24, (i) {
+      final mins = i * 15.0;
+      // Medication effect: tremor dips at ~45–90 min post-dose, rises after 3 h
+      final phase = mins / 180.0;
+      final tremorCurve = 1.8 - 0.8 * (phase < 0.5 ? phase * 2 : (1 - phase) * 2).clamp(0.0, 1.0);
+      final bradyCurve  = 2.0 - 0.7 * (phase < 0.5 ? phase * 2 : (1 - phase) * 2).clamp(0.0, 1.0);
+      return MedicationResponsePoint(
+        timestamp:         base.add(Duration(minutes: i * 15)),
+        minutesSinceDose:  mins,
+        tremorScore:       tremorCurve.clamp(0.5, 3.5),
+        bradykinesiaScore: bradyCurve.clamp(0.8, 3.5),
+        dyskinesiaScore:   (0.4 + 0.4 * (phase < 0.3 ? phase / 0.3 : 0.0)).clamp(0.0, 1.5),
+        medicationName:    'Levodopa / Carbidopa',
+      );
+    });
+  }
+
+  static List<WellbeingCheckIn> get _demoCheckIns {
+    final base = DateTime(2026, 6, 8);
+    return [
+      WellbeingCheckIn(date: base,                                    feelingScore: 3, symptoms: [],                   notes: 'Feeling good today'),
+      WellbeingCheckIn(date: base.subtract(const Duration(days: 1)), feelingScore: 2, symptoms: ['Stiffness'],         notes: null),
+      WellbeingCheckIn(date: base.subtract(const Duration(days: 2)), feelingScore: 3, symptoms: [],                   notes: null),
+      WellbeingCheckIn(date: base.subtract(const Duration(days: 3)), feelingScore: 2, symptoms: ['Tremor', 'Fatigue'], notes: 'Harder afternoon'),
+      WellbeingCheckIn(date: base.subtract(const Duration(days: 4)), feelingScore: 3, symptoms: [],                   notes: null),
+      WellbeingCheckIn(date: base.subtract(const Duration(days: 5)), feelingScore: 3, symptoms: [],                   notes: 'Good walk in the morning'),
+      WellbeingCheckIn(date: base.subtract(const Duration(days: 6)), feelingScore: 1, symptoms: ['Tremor', 'Pain'],   notes: 'Rough day'),
+    ];
+  }
 
   static final _staticAppointments = [
     Appointment(id: 'a001', dateTime: DateTime(2026, 6, 18, 10, 30),

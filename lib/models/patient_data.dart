@@ -23,21 +23,27 @@ class DeviceStatus {
 // All scores are 0.0–4.0 following MDS-UPDRS convention
 class SymptomSnapshot {
   final DateTime timestamp;
-  final double tremorScore;      // 0.0–4.0
+  final double tremorScore;       // 0.0–4.0
   final double bradykinesiaScore; // 0.0–4.0
-  final double dyskinesiaScore;  // 0.0–4.0
+  final double dyskinesiaScore;   // 0.0–4.0
+  // Rigidity is not directly measured by the wristband hardware; it is
+  // supplied as a demo value or left at 0.0 for real data until a
+  // passive-resistance proxy is added to the pipeline.
+  final double rigidityScore;     // 0.0–4.0
 
    SymptomSnapshot({
     required this.timestamp,
     required this.tremorScore,
     required this.bradykinesiaScore,
     required this.dyskinesiaScore,
+    this.rigidityScore = 0.0,
   });
 
   // Human-readable label for patients (no raw numbers shown)
   String get tremorLabel => _scoreToLabel(tremorScore);
   String get bradykinesiaLabel => _scoreToLabel(bradykinesiaScore);
   String get dyskinesiaLabel => _scoreToLabel(dyskinesiaScore);
+  String get rigidityLabel => _scoreToLabel(rigidityScore);
 
   static String _scoreToLabel(double score) {
     if (score < 0.5) return 'None';
@@ -49,7 +55,7 @@ class SymptomSnapshot {
 
   // Overall wellness (inverted, 0=worst 1=best) for patient UI
   double get overallWellness =>
-      1.0 - ((tremorScore + bradykinesiaScore + dyskinesiaScore) / 12.0);
+      1.0 - ((tremorScore + bradykinesiaScore + dyskinesiaScore + rigidityScore) / 16.0);
 }
 
 // --- Gait metrics (from processing team) --------------------

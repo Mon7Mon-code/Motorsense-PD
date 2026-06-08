@@ -322,38 +322,6 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _MetricPill extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  const _MetricPill(
-      {required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
-      ),
-      child: Column(
-        children: [
-          Text(value,
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w800, color: color)),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 9,
-                  color: Colors.white.withValues(alpha: 0.55),
-                  fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-}
-
 // ══ TAB 1: OVERVIEW ══════════════════════════════════════════
 class _OverviewTab extends StatelessWidget {
   final Patient patient;

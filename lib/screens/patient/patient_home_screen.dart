@@ -94,7 +94,8 @@ class PatientHomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     _UpdatedLabel(snapshot.timestamp),
-                  ],
+                  ] else
+                    _NoDataCard(),
 
                   const SizedBox(height: 22),
 
@@ -594,6 +595,31 @@ class _SymptomBlock extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ══ NO DATA CARD ═════════════════════════════════════════════
+class _NoDataCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0EBE5),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.neutral200, width: 0.5),
+      ),
+      child: Row(children: [
+        const Icon(Icons.watch_outlined, size: 20, color: AppTheme.neutral400),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Text(
+            'No data collected yet.\nWear your device and connect it to begin monitoring.',
+            style: TextStyle(fontSize: 13, color: AppTheme.neutral500, height: 1.45),
+          ),
+        ),
+      ]),
     );
   }
 }

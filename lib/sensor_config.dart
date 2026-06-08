@@ -5,8 +5,29 @@
 /// connection interval; [estimateSampleRateHz] should be used on live streams.
 library;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  DEMO MODE — flip this before submission / live demo
+// ─────────────────────────────────────────────────────────────────────────────
+//
+//  true  → Use hard-coded demo values throughout the app so graphs, baseline
+//          comparisons, symptom metrics, clinician dashboard, and trends are
+//          all populated.  Parkinson's monitoring requires weeks of data before
+//          a meaningful baseline is established; demo mode lets us show what the
+//          platform looks like after sufficient data has been collected.
+//
+//  false → Use only real collected data.  New patients will see empty states
+//          ("No data collected yet", "Baseline still being established", etc.)
+//          rather than fabricated clinical values.  Connection / loading
+//          status is shown only in the BLE / Device tab, not everywhere.
+// ─────────────────────────────────────────────────────────────────────────────
+
 class SensorConfig {
   SensorConfig._();
+
+  // ── DEMO MODE ──────────────────────────────────────────────────────────────
+
+  /// Master demo flag.  Set to true for demo day; false for real-world use.
+  static const bool demoMode = true;           // ← flip before submission
 
   // ── PD-Monitor BLE (firmware contract) ─────────────────────────────────────
 
@@ -26,10 +47,6 @@ class SensorConfig {
 
   /// Set true to stream simulated IMU data (no hardware required).
   static const bool useBleSimulator = false;
-
-  /// Set true to skip the 24-hour baseline window and show live data immediately.
-  /// Revert to false before clinical deployment.
-  static const bool demoMode = true;
 
   /// Raw hardware ODR of the LSM6DS3 (104 Hz). Used only for reference;
   /// the firmware outputs CSV at [bleCsvOdrHz], not at this rate.
