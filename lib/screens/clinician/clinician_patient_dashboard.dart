@@ -721,6 +721,26 @@ class _MedResponseChart extends StatelessWidget {
 
     return LineChart(
       LineChartData(
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            tooltipBgColor: const Color(0xFFEDE8E3),
+            tooltipRoundedRadius: 8,
+            tooltipBorder: const BorderSide(color: Color(0xFFD6CFC8)),
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                return LineTooltipItem(
+                  spot.y.toStringAsFixed(2),
+                  TextStyle(
+                    color: spot.bar.color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
         minX: 0, maxX: 360,
         minY: 0, maxY: 4,
         gridData: FlGridData(
@@ -951,7 +971,27 @@ class _GaitTrendChart extends StatelessWidget {
     return SizedBox(
       height: 140,
       child: LineChart(LineChartData(
-        minY: 0, maxY: 2,
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            tooltipBgColor: const Color(0xFFEDE8E3),
+            tooltipRoundedRadius: 8,
+            tooltipBorder: const BorderSide(color: Color(0xFFD6CFC8)),
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                return LineTooltipItem(
+                  spot.y.toStringAsFixed(2),
+                  TextStyle(
+                    color: spot.bar.color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
+        minY: 0, maxY: 4,
         gridData: FlGridData(
           show: true, drawVerticalLine: false,
           horizontalInterval: 0.5,
@@ -1330,6 +1370,26 @@ class _RichChart extends StatelessWidget {
         SizedBox(
           height: 150,
           child: LineChart(LineChartData(
+            lineTouchData: LineTouchData(
+              enabled: true,
+              touchTooltipData: LineTouchTooltipData(
+                tooltipBgColor: const Color(0xFFEDE8E3),
+                tooltipRoundedRadius: 8,
+                tooltipBorder: const BorderSide(color: Color(0xFFD6CFC8)),
+                getTooltipItems: (touchedSpots) {
+                  return touchedSpots.map((spot) {
+                    return LineTooltipItem(
+                      spot.y.toStringAsFixed(2),
+                      TextStyle(
+                        color: spot.bar.color,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    );
+                  }).toList();
+                },
+              ),
+            ),
             minY: 0, maxY: 4,
             gridData: FlGridData(
               show: true, drawVerticalLine: false,
