@@ -4,6 +4,8 @@ import '../../theme/app_theme.dart';
 import '../../services/app_data_service.dart';
 import '../../widgets/shared/shared_widgets.dart';
 import '../patient/patient_shell.dart';
+import '../../ble_service.dart';
+import '../../services/app_data_service.dart';
 
 // ============================================================
 // PATIENT ONBOARDING FLOW
@@ -63,8 +65,13 @@ class _PatientOnboardingScreenState extends State<PatientOnboardingScreen> {
   }
 
   void _finish(BuildContext context) {
-    // Save profile and navigate to main app
-    // TODO: persist to local storage
+    final svc = Provider.of<AppDataService>(context, listen: false);
+    svc.updatePatientName(
+      name: _nameController.text.isNotEmpty
+          ? _nameController.text
+          : 'Patient',
+      diagnosisYear: _diagnosisYearController.text,
+    );
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const PatientShell()),
     );
@@ -254,7 +261,7 @@ class _WelcomePage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.neutral100,
+              color: AppTheme.neutral200,
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text(
@@ -432,7 +439,7 @@ class _ProfilePage extends StatelessWidget {
               'Your data stays on your device and is only shared with your assigned clinician.',
               style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.neutral500,
+                  color: AppTheme.neutral700,
                   height: 1.4),
             ),
           ),
@@ -457,7 +464,7 @@ class _DevicePage extends StatefulWidget {
 class _DevicePageState extends State<_DevicePage> {
   @override
   Widget build(BuildContext context) {
-    final ble = Provider.of<dynamic>(context);
+    final ble = Provider.of<BleService>(context);
     final isConnected = ble?.isActive ?? false;
 
     return _OnboardingPage(
@@ -556,11 +563,11 @@ class _DevicePageState extends State<_DevicePage> {
             child: Column(
               children: [
                 _GuideRow(step: 1,
-                    text: 'Wear it on your non-dominant wrist, like a watch.'),
-                _GuideRow(step: 2,
-                    text: 'It should be snug but comfortable — not sliding.'),
-                _GuideRow(step: 3,
-                    text: 'Keep it within 1 metre of your phone.',
+                    text: 'Wear the device on your non-dominant wrist, as you would a watch.'),
+_GuideRow(step: 2,
+    text: 'It should feel snug but comfortable and should not slide around.'),
+_GuideRow(step: 3,
+    text: 'Keep your phone within one metre of the device at all times.',
                     isLast: true),
               ],
             ),

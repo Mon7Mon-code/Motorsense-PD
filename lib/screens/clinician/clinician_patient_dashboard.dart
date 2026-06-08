@@ -7,8 +7,7 @@ import '../../models/patient_data.dart';
 import '../../widgets/shared/shared_widgets.dart';
 
 // ============================================================
-// CLINICIAN PATIENT DASHBOARD
-// Tabbed view: Overview | Symptoms | Medication | Gait | Reports
+// CLINICIAN PATIENT DASHBOARD v2 — Poster-worthy
 // ============================================================
 
 class ClinicianPatientDashboard extends StatefulWidget {
@@ -20,8 +19,7 @@ class ClinicianPatientDashboard extends StatefulWidget {
       _ClinicianPatientDashboardState();
 }
 
-class _ClinicianPatientDashboardState
-    extends State<ClinicianPatientDashboard>
+class _ClinicianPatientDashboardState extends State<ClinicianPatientDashboard>
     with SingleTickerProviderStateMixin {
   late TabController _tabs;
 
@@ -39,77 +37,240 @@ class _ClinicianPatientDashboardState
 
   @override
   Widget build(BuildContext context) {
-    final svc = Provider.of<AppDataService>(context);
+    final svc     = Provider.of<AppDataService>(context);
     final patient = svc.getPatient(widget.patientId);
-    if (patient == null) return const Scaffold(body: Center(child: Text('Patient not found')));
+    if (patient == null) return const Scaffold(
+        body: Center(child: Text('Patient not found')));
 
     return Scaffold(
-      backgroundColor: AppTheme.neutral50,
-      appBar: AppBar(
-        backgroundColor: AppTheme.neutral50,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(patient.name),
-            Text(
-              '${patient.age}y · Dx ${patient.diagnosisYear} · ${StatusBadgeText(patient.statusFlag)}',
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: AppTheme.neutral500),
-            ),
-          ],
-        ),
-        actions: [
-          StatusPill(flag: patient.statusFlag),
-          const SizedBox(width: 16),
+      backgroundColor: const Color(0xFFF2EDE8),
+      body: NestedScrollView(
+        headerSliverBuilder: (_, __) => [
+          _PatientSliverHeader(patient: patient, tabs: _tabs),
         ],
-        bottom: TabBar(
+        body: TabBarView(
           controller: _tabs,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          labelColor: AppTheme.teal600,
-          unselectedLabelColor: AppTheme.neutral400,
-          indicatorColor: AppTheme.teal600,
-          indicatorWeight: 2,
-          labelStyle: const TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w500),
-          unselectedLabelStyle: const TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w400),
-          tabs: const [
-            Tab(text: 'Overview'),
-            Tab(text: 'Symptoms'),
-            Tab(text: 'Medication'),
-            Tab(text: 'Gait'),
-            Tab(text: 'Reports'),
+          children: [
+            _OverviewTab(patient: patient, svc: svc),
+            _SymptomsTab(patient: patient, svc: svc),
+            _MedicationTab(patient: patient, svc: svc),
+            _GaitTab(patient: patient, svc: svc),
+            _ReportsTab(patient: patient),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabs,
+    );
+  }
+}
+
+// ── Sliver header ─────────────────────────────────────────────
+class _PatientSliverHeader extends StatelessWidget {
+  final Patient patient;
+  final TabController tabs;
+  const _PatientSliverHeader({required this.patient, required this.tabs});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverAppBar(
+      expandedHeight: 220,
+      pinned: true,
+      backgroundColor: const Color(0xFF0F3D24),
+      foregroundColor: Colors.white,
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 52, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // Avatar
+                      Container(
+                        width: 52, height: 52,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.3), width: 1.5),
+                        ),
+                        child: Center(
+                          child: Text(
+                            patient.name.split(' ').map((w) => w[0]).take(2).join(),
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w700,
+                                color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(patient.name,
+                                style: const TextStyle(
+                                    fontSize: 20, fontWeight: FontWeight.w700,
+                                    color: Colors.white, letterSpacing: -0.3)),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${patient.age}y · Diagnosed ${patient.diagnosisYear} · ${patient.assignedClinicianId}',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.65)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _StatusBadge(flag: patient.statusFlag),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Metric pills row
+                  Row(
+                    children: [
+                      _MetricPill(
+                        label: 'Tremor',
+                        value: patient.latestSnapshot?.tremorScore
+                                .toStringAsFixed(1) ?? '—',
+                        color: _scoreColor(
+                            patient.latestSnapshot?.tremorScore ?? 0),
+                      ),
+                      const SizedBox(width: 8),
+                      _MetricPill(
+                        label: 'Brady.',
+                        value: patient.latestSnapshot?.bradykinesiaScore
+                                .toStringAsFixed(1) ?? '—',
+                        color: _scoreColor(
+                            patient.latestSnapshot?.bradykinesiaScore ?? 0),
+                      ),
+                      const SizedBox(width: 8),
+                      _MetricPill(
+                        label: 'Dysk.',
+                        value: patient.latestSnapshot?.dyskinesiaScore
+                                .toStringAsFixed(1) ?? '—',
+                        color: _scoreColor(
+                            patient.latestSnapshot?.dyskinesiaScore ?? 0),
+                      ),
+                      const SizedBox(width: 8),
+                      _MetricPill(
+                        label: 'Device',
+                        value: patient.deviceStatus.isConnected ? 'Live' : 'Off',
+                        color: patient.deviceStatus.isConnected
+                            ? const Color(0xFF4CD97B)
+                            : Colors.white38,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      bottom: TabBar(
+        controller: tabs,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        labelColor: Colors.white,
+        unselectedLabelColor: Colors.white38,
+        indicatorColor: const Color(0xFF4CD97B),
+        indicatorWeight: 2.5,
+        labelStyle: const TextStyle(
+            fontSize: 13, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(
+            fontSize: 13, fontWeight: FontWeight.w400),
+        tabs: const [
+          Tab(text: 'Overview'),
+          Tab(text: 'Symptoms'),
+          Tab(text: 'Medication'),
+          Tab(text: 'Gait'),
+          Tab(text: 'Reports'),
+        ],
+      ),
+    );
+  }
+
+  Color _scoreColor(double score) {
+    if (score < 1.0) return const Color(0xFF4CD97B);
+    if (score < 2.0) return const Color(0xFFE9A020);
+    if (score < 3.0) return const Color(0xFFE07030);
+    return const Color(0xFFD94F4F);
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String flag;
+  const _StatusBadge({required this.flag});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = flag == 'needs-attention'
+        ? const Color(0xFFD94F4F)
+        : flag == 'monitor'
+            ? const Color(0xFFE9A020)
+            : const Color(0xFF4CD97B);
+    final label = flag == 'needs-attention'
+        ? 'Needs attention'
+        : flag == 'monitor'
+            ? 'Monitor'
+            : 'Stable';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4), width: 0.5),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+}
+
+class _MetricPill extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _MetricPill(
+      {required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+      ),
+      child: Column(
         children: [
-          _OverviewTab(patient: patient, svc: svc),
-          _SymptomsTab(patient: patient, svc: svc),
-          _MedicationTab(patient: patient, svc: svc),
-          _GaitTab(patient: patient, svc: svc),
-          _ReportsTab(patient: patient),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w800, color: color)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 9,
+                  color: Colors.white.withOpacity(0.55),
+                  fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 }
 
-String StatusBadgeText(String flag) {
-  switch (flag) {
-    case 'needs-attention': return 'Needs attention';
-    case 'monitor': return 'Monitor';
-    default: return 'Stable';
-  }
-}
-
-// ============================================================
-// TAB 1: OVERVIEW
-// ============================================================
+// ══ TAB 1: OVERVIEW ══════════════════════════════════════════
 class _OverviewTab extends StatelessWidget {
   final Patient patient;
   final AppDataService svc;
@@ -119,148 +280,121 @@ class _OverviewTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final snapshot = patient.latestSnapshot;
     final baseline = patient.baselineSnapshot;
-    final device = patient.deviceStatus;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
-        // Device & sync status
-        DeviceStatusBar(
-          isConnected: device.isConnected,
-          batteryPercent: device.batteryPercent,
-          isPatientView: false,
-        ),
-        const SizedBox(height: 16),
-
-        // Current vs baseline grid
+        // Current vs baseline
         if (snapshot != null && baseline != null) ...[
-          const SectionHeader(title: 'Current vs baseline'),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 2.0,
-            children: [
-              _BaselineTile(
-                label: 'Tremor',
-                current: snapshot.tremorScore,
-                baseline: baseline.tremorScore,
-              ),
-              _BaselineTile(
-                label: 'Bradykinesia',
-                current: snapshot.bradykinesiaScore,
-                baseline: baseline.bradykinesiaScore,
-              ),
-              _BaselineTile(
-                label: 'Dyskinesia',
-                current: snapshot.dyskinesiaScore,
-                baseline: baseline.dyskinesiaScore,
-              ),
-              _BaselineTile(
-                label: 'Rigidity',
-                current: snapshot.rigidityScore,
-                baseline: baseline.rigidityScore,
-              ),
+          _CardLabel('Current vs baseline  ·  MDS-UPDRS scale 0–4'),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _BaselineCard(
+              label: 'Tremor',
+              current: snapshot.tremorScore,
+              baseline: baseline.tremorScore,
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _BaselineCard(
+              label: 'Bradykinesia',
+              current: snapshot.bradykinesiaScore,
+              baseline: baseline.bradykinesiaScore,
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _BaselineCard(
+              label: 'Dyskinesia',
+              current: snapshot.dyskinesiaScore,
+              baseline: baseline.dyskinesiaScore,
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _BaselineCard(
+              label: 'Rigidity',
+              current: snapshot.rigidityScore,
+              baseline: baseline.rigidityScore,
+            )),
+          ]),
+          const SizedBox(height: 20),
+        ],
+
+        // Score bars
+        _CardLabel('Current symptom scores'),
+        const SizedBox(height: 10),
+        _ClinicalCard(
+          child: Column(children: [
+            if (snapshot != null) ...[
+              _ClinicalScoreBar('Tremor', snapshot.tremorScore),
+              const SizedBox(height: 14),
+              _ClinicalScoreBar('Bradykinesia', snapshot.bradykinesiaScore),
+              const SizedBox(height: 14),
+              _ClinicalScoreBar('Dyskinesia', snapshot.dyskinesiaScore),
+              const SizedBox(height: 14),
+              _ClinicalScoreBar('Rigidity', snapshot.rigidityScore),
             ],
-          ),
-          const SizedBox(height: 16),
-        ],
+          ]),
+        ),
 
-        // Scores bars — numerical for clinician
-        if (snapshot != null) ...[
-          const SectionHeader(title: 'Current symptom scores (MDS-UPDRS)'),
-          AppCard(
-            child: Column(
-              children: [
-                ScoreBar(label: 'Tremor', score: snapshot.tremorScore, showLabel: false),
-                const SizedBox(height: 12),
-                ScoreBar(label: 'Bradykinesia', score: snapshot.bradykinesiaScore, showLabel: false),
-                const SizedBox(height: 12),
-                ScoreBar(label: 'Dyskinesia', score: snapshot.dyskinesiaScore, showLabel: false),
-                const SizedBox(height: 12),
-                ScoreBar(label: 'Rigidity', score: snapshot.rigidityScore, showLabel: false),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
+        const SizedBox(height: 20),
 
-        // Last patient check-in
-        const SectionHeader(title: 'Patient self-report'),
-        if (patient.checkIns.isNotEmpty)
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        // Patient self-report
+        _CardLabel('Patient self-report'),
+        const SizedBox(height: 10),
+        _ClinicalCard(
+          child: patient.checkIns.isEmpty
+              ? const Text('No check-ins recorded.',
+                  style: TextStyle(fontSize: 13, color: AppTheme.neutral400))
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _feelingEmoji(patient.checkIns.first.feelingScore),
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          patient.checkIns.first.feelingLabel,
+                    Row(children: [
+                      Text(
+                        patient.checkIns.first.feelingScore == 3
+                            ? '😊' : patient.checkIns.first.feelingScore == 2
+                            ? '😐' : '😞',
+                        style: const TextStyle(fontSize: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(patient.checkIns.first.feelingLabel,
+                              style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w700)),
+                          Text(_timeAgo(patient.checkIns.first.date),
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppTheme.neutral400)),
+                        ],
+                      ),
+                    ]),
+                    if (patient.checkIns.first.symptoms.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 6, children:
+                        patient.checkIns.first.symptoms.map((s) =>
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.neutral100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(s, style: const TextStyle(
+                                fontSize: 11, color: AppTheme.neutral700)),
+                          ),
+                        ).toList(),
+                      ),
+                    ],
+                    if (patient.checkIns.first.notes != null) ...[
+                      const SizedBox(height: 8),
+                      Text('"${patient.checkIns.first.notes}"',
                           style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          'Last check-in ${_timeAgo(patient.checkIns.first.date)}',
-                          style: const TextStyle(
-                              fontSize: 11, color: AppTheme.neutral400),
-                        ),
-                      ],
-                    ),
+                              fontSize: 13, color: AppTheme.neutral500,
+                              fontStyle: FontStyle.italic, height: 1.4)),
+                    ],
                   ],
                 ),
-                if ((patient.checkIns.first.symptoms).isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    children: patient.checkIns.first.symptoms
-                        .map((s) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppTheme.neutral100,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(s,
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.neutral700)),
-                            ))
-                        .toList(),
-                  ),
-                ],
-                if (patient.checkIns.first.notes != null) ...[
-                  const SizedBox(height: 8),
-                  Text('"${patient.checkIns.first.notes}"',
-                      style: const TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.neutral600,
-                          fontStyle: FontStyle.italic,
-                          height: 1.4)),
-                ],
-              ],
-            ),
-          )
-        else
-          AppCard(
-            child: const Text('No check-ins recorded.',
-                style: TextStyle(fontSize: 13, color: AppTheme.neutral400)),
-          ),
+        ),
       ],
     );
   }
-
-  String _feelingEmoji(int score) =>
-      score == 3 ? '😊' : score == 2 ? '😐' : '😞';
 
   String _timeAgo(DateTime t) {
     final diff = DateTime.now().difference(t);
@@ -270,70 +404,7 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
-class _BaselineTile extends StatelessWidget {
-  final String label;
-  final double current;
-  final double baseline;
-  const _BaselineTile(
-      {required this.label, required this.current, required this.baseline});
-
-  double get _delta => current - baseline;
-  bool get _worse => _delta > 0.2;
-  bool get _better => _delta < -0.2;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _worse
-        ? AppTheme.red400
-        : _better
-            ? AppTheme.teal500
-            : AppTheme.neutral700;
-    final bg = _worse
-        ? AppTheme.red50
-        : _better
-            ? AppTheme.teal50
-            : Colors.white;
-    final arrow = _worse ? '↑' : _better ? '↓' : '—';
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neutral200, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.neutral500,
-                  fontWeight: FontWeight.w500)),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(current.toStringAsFixed(1),
-                  style: AppTheme.monoLarge.copyWith(color: color)),
-              const SizedBox(width: 4),
-              Text(
-                '$arrow ${_delta.abs().toStringAsFixed(1)}',
-                style: TextStyle(
-                    fontSize: 11, color: color, fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================
-// TAB 2: SYMPTOMS — 7-day trends with full chart
-// ============================================================
+// ══ TAB 2: SYMPTOMS ═══════════════════════════════════════════
 class _SymptomsTab extends StatelessWidget {
   final Patient patient;
   final AppDataService svc;
@@ -344,147 +415,99 @@ class _SymptomsTab extends StatelessWidget {
     final snapshots = svc.getWeeklySnapshots(patient.id);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
-        const SectionHeader(title: '7-day tremor score'),
-        AppCard(
-          child: _ClinicalLineChart(
-            snapshots: snapshots,
-            getValue: (s) => s.tremorScore,
-            color: AppTheme.teal500,
-            baseline: patient.baselineSnapshot?.tremorScore,
-          ),
-        ),
+        _CardLabel('7-day tremor  ·  MDS-UPDRS'),
+        const SizedBox(height: 10),
+        _ClinicalCard(child: _RichChart(
+          snapshots: snapshots,
+          getValue: (s) => s.tremorScore,
+          color: const Color(0xFF2D9E63),
+          baseline: patient.baselineSnapshot?.tremorScore,
+          label: 'Tremor score',
+        )),
         const SizedBox(height: 16),
-        const SectionHeader(title: '7-day bradykinesia score'),
-        AppCard(
-          child: _ClinicalLineChart(
-            snapshots: snapshots,
-            getValue: (s) => s.bradykinesiaScore,
-            color: AppTheme.blue400,
-            baseline: patient.baselineSnapshot?.bradykinesiaScore,
-          ),
-        ),
+
+        _CardLabel('7-day bradykinesia  ·  MDS-UPDRS'),
+        const SizedBox(height: 10),
+        _ClinicalCard(child: _RichChart(
+          snapshots: snapshots,
+          getValue: (s) => s.bradykinesiaScore,
+          color: const Color(0xFF3B82D4),
+          baseline: patient.baselineSnapshot?.bradykinesiaScore,
+          label: 'Bradykinesia score',
+        )),
         const SizedBox(height: 16),
-        const SectionHeader(title: '7-day dyskinesia score'),
-        AppCard(
-          child: _ClinicalLineChart(
-            snapshots: snapshots,
-            getValue: (s) => s.dyskinesiaScore,
-            color: AppTheme.amber400,
-            baseline: patient.baselineSnapshot?.dyskinesiaScore,
-          ),
-        ),
+
+        _CardLabel('7-day dyskinesia  ·  MDS-UPDRS'),
+        const SizedBox(height: 10),
+        _ClinicalCard(child: _RichChart(
+          snapshots: snapshots,
+          getValue: (s) => s.dyskinesiaScore,
+          color: const Color(0xFFE9A020),
+          baseline: patient.baselineSnapshot?.dyskinesiaScore,
+          label: 'Dyskinesia score',
+        )),
         const SizedBox(height: 16),
+
         // Data table
-        const SectionHeader(title: 'Daily values'),
-        AppCard(
+        _CardLabel('Daily values'),
+        const SizedBox(height: 10),
+        _ClinicalCard(
           padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
-                decoration: const BoxDecoration(
-                  color: AppTheme.neutral50,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: const Row(
-                  children: [
-                    Expanded(child: Text('Day', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.neutral500))),
-                    _HeaderCell('Tremor'),
-                    _HeaderCell('Brady.'),
-                    _HeaderCell('Dysk.'),
-                  ],
-                ),
+          child: Column(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF2EDE8),
+                borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(16)),
               ),
-              const Divider(height: 0),
-              ...snapshots.asMap().entries.map((entry) {
-                final i = entry.key;
-                final s = entry.value;
-                return Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(_dayLabel(s.timestamp, i),
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppTheme.neutral700)),
-                          ),
-                          _ScoreCell(s.tremorScore),
-                          _ScoreCell(s.bradykinesiaScore),
-                          _ScoreCell(s.dyskinesiaScore),
-                        ],
-                      ),
-                    ),
-                    if (i < snapshots.length - 1)
-                      const Divider(height: 0, indent: 16),
-                  ],
-                );
-              }),
-            ],
-          ),
+              child: const Row(children: [
+                Expanded(child: Text('Day',
+                    style: TextStyle(fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.neutral500))),
+                _TH('Tremor'),
+                _TH('Brady.'),
+                _TH('Dysk.'),
+              ]),
+            ),
+            const Divider(height: 0),
+            ...snapshots.asMap().entries.map((e) {
+              final i = e.key;
+              final s = e.value;
+              final diff = DateTime.now().difference(s.timestamp).inDays;
+              final dayLabel = diff == 0 ? 'Today'
+                  : diff == 1 ? 'Yesterday'
+                  : '${s.timestamp.day}/${s.timestamp.month}';
+              return Column(children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 11),
+                  child: Row(children: [
+                    Expanded(child: Text(dayLabel,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.neutral700,
+                            fontWeight: FontWeight.w500))),
+                    _ScoreCell(s.tremorScore),
+                    _ScoreCell(s.bradykinesiaScore),
+                    _ScoreCell(s.dyskinesiaScore),
+                  ]),
+                ),
+                if (i < snapshots.length - 1)
+                  const Divider(height: 0, indent: 16),
+              ]);
+            }),
+          ]),
         ),
       ],
     );
   }
-
-  String _dayLabel(DateTime dt, int i) {
-    final diff = DateTime.now().difference(dt).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
-    return '${dt.day}/${dt.month}';
-  }
 }
 
-class _HeaderCell extends StatelessWidget {
-  final String text;
-  const _HeaderCell(this.text);
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 60,
-      child: Text(text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.neutral500)),
-    );
-  }
-}
-
-class _ScoreCell extends StatelessWidget {
-  final double score;
-  const _ScoreCell(this.score);
-
-  Color get _color {
-    if (score < 1.0) return AppTheme.teal500;
-    if (score < 2.0) return AppTheme.amber400;
-    if (score < 3.0) return const Color(0xFFE07B30);
-    return AppTheme.red400;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 60,
-      child: Text(
-        score.toStringAsFixed(1),
-        textAlign: TextAlign.center,
-        style: AppTheme.mono.copyWith(fontSize: 13, color: _color),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// TAB 3: MEDICATION — the centrepiece clinical insight
-// ============================================================
+// ══ TAB 3: MEDICATION — THE HERO SCREEN ══════════════════════
 class _MedicationTab extends StatelessWidget {
   final Patient patient;
   final AppDataService svc;
@@ -496,30 +519,55 @@ class _MedicationTab extends StatelessWidget {
     final meds = svc.getMedications(patient.id);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
+
         // Key insight banner
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppTheme.teal50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.teal100, width: 0.5),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1A6B3E).withOpacity(0.3),
+                blurRadius: 12, offset: const Offset(0, 4)),
+            ],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.insights_rounded,
-                  color: AppTheme.teal600, size: 18),
-              const SizedBox(width: 10),
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.insights_rounded,
+                    color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 12),
               const Expanded(
-                child: Text(
-                    'Symptoms tracked against dose timing. Best response 30–180 min post-dose. '
-                    'Wearing-off starts ~3 hours after dose.',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.teal700,
-                        height: 1.4)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Clinical insight',
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w700,
+                            color: Colors.white70, letterSpacing: 0.3)),
+                    SizedBox(height: 3),
+                    Text(
+                      'Peak therapeutic window: 30–180 min post-dose. '
+                      'Wearing-off detected ~3h after dose. '
+                      'Consider dose interval adjustment.',
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.white, height: 1.4)),
+                  ],
+                ),
               ),
             ],
           ),
@@ -527,38 +575,78 @@ class _MedicationTab extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // CORE CLINICAL CHART: Symptom score vs time since dose
-        const SectionHeader(title: 'Symptom score vs time since dose'),
-        AppCard(
+        // THE CENTREPIECE CHART
+        _CardLabel('Symptom score vs time since dose'),
+        const SizedBox(height: 10),
+        _ClinicalCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Legend
-              Wrap(
-                spacing: 16,
-                children: [
-                  _LegendItem(color: AppTheme.teal500, label: 'Tremor'),
-                  _LegendItem(color: AppTheme.blue400, label: 'Bradykinesia'),
-                  _LegendItem(color: AppTheme.amber400, label: 'Dyskinesia'),
-                ],
-              ),
-              const SizedBox(height: 12),
+              Wrap(spacing: 16, children: [
+                _Legend(color: const Color(0xFF2D9E63), label: 'Tremor'),
+                _Legend(color: const Color(0xFF3B82D4), label: 'Bradykinesia'),
+                _Legend(color: const Color(0xFFE9A020), label: 'Dyskinesia'),
+              ]),
+              const SizedBox(height: 16),
               SizedBox(
-                height: 200,
+                height: 220,
                 child: _MedResponseChart(points: responsePoints),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Minutes since last dose →',
+              // Zone labels
+              Row(children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF9F3),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('← Onset',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: AppTheme.neutral400,
-                            letterSpacing: 0.3)),
+                        style: TextStyle(fontSize: 10,
+                            color: Color(0xFF1A6B3E),
+                            fontWeight: FontWeight.w600)),
                   ),
-                ],
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF9F3),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('Peak therapeutic window',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 10,
+                            color: Color(0xFF1A6B3E),
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFDF0F0),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('Wearing off →',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 10,
+                            color: Color(0xFFAB2828),
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              const Center(
+                child: Text('Minutes since last dose →',
+                    style: TextStyle(
+                        fontSize: 10, color: AppTheme.neutral400)),
               ),
             ],
           ),
@@ -567,49 +655,41 @@ class _MedicationTab extends StatelessWidget {
         const SizedBox(height: 16),
 
         // Medication schedule
-        const SectionHeader(title: 'Current medications'),
+        _CardLabel('Current medications'),
+        const SizedBox(height: 10),
         ...meds.map((med) {
           final color = Color(int.parse(
-              'FF${med.color.replaceAll('#', '')}',
-              radix: 16));
+              'FF${med.color.replaceAll('#', '')}', radix: 16));
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: AppCard(
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration:
-                        BoxDecoration(color: color, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(med.name,
-                            style: const TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600)),
-                        Text(med.dose,
-                            style: AppTheme.mono
-                                .copyWith(fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('Schedule',
-                          style: const TextStyle(
-                              fontSize: 11, color: AppTheme.neutral400)),
-                      Text(med.scheduledTimes.join(' · '),
-                          style: AppTheme.mono
-                              .copyWith(fontSize: 12)),
-                    ],
-                  ),
-                ],
-              ),
+            child: _ClinicalCard(
+              child: Row(children: [
+                Container(
+                  width: 12, height: 12,
+                  decoration: BoxDecoration(
+                      color: color, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(med.name, style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(med.dose, style: AppTheme.mono.copyWith(
+                        fontSize: 12, color: AppTheme.neutral500)),
+                  ],
+                )),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('Schedule', style: TextStyle(
+                        fontSize: 10, color: AppTheme.neutral400,
+                        fontWeight: FontWeight.w500)),
+                    Text(med.scheduledTimes.join(' · '),
+                        style: AppTheme.mono.copyWith(fontSize: 12)),
+                  ],
+                ),
+              ]),
             ),
           );
         }),
@@ -618,31 +698,17 @@ class _MedicationTab extends StatelessWidget {
   }
 }
 
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _LegendItem({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(width: 12, height: 2, color: color),
-        const SizedBox(width: 4),
-        Text(label,
-            style: TextStyle(fontSize: 11, color: color)),
-      ],
-    );
-  }
-}
-
+// ── Medication response chart ──────────────────────────────────
 class _MedResponseChart extends StatelessWidget {
   final List<MedicationResponsePoint> points;
   const _MedResponseChart({required this.points});
 
   @override
   Widget build(BuildContext context) {
+    if (points.isEmpty) return const Center(
+        child: Text('Insufficient data', style: TextStyle(
+            color: AppTheme.neutral400)));
+
     final tremorSpots = points.map((p) =>
         FlSpot(p.minutesSinceDose, p.tremorScore)).toList();
     final bradySpots = points.map((p) =>
@@ -652,38 +718,50 @@ class _MedResponseChart extends StatelessWidget {
 
     return LineChart(
       LineChartData(
-        minX: 0,
-        maxX: 360,
-        minY: 0,
-        maxY: 4,
+        minX: 0, maxX: 360,
+        minY: 0, maxY: 4,
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
           horizontalInterval: 1,
           verticalInterval: 60,
-          getDrawingHorizontalLine: (_) =>
-              FlLine(color: AppTheme.neutral100, strokeWidth: 0.5),
-          getDrawingVerticalLine: (_) =>
-              FlLine(color: AppTheme.neutral100, strokeWidth: 0.5, dashArray: [4, 4]),
+          getDrawingHorizontalLine: (_) => FlLine(
+              color: const Color(0xFFF0EBE5), strokeWidth: 1),
+          getDrawingVerticalLine: (_) => FlLine(
+              color: const Color(0xFFF0EBE5),
+              strokeWidth: 1,
+              dashArray: [4, 4]),
+        ),
+        // Shade the therapeutic window (30–180min)
+        rangeAnnotations: RangeAnnotations(
+          verticalRangeAnnotations: [
+            VerticalRangeAnnotation(
+              x1: 30, x2: 180,
+              color: const Color(0xFF2D9E63).withOpacity(0.06),
+            ),
+          ],
         ),
         borderData: FlBorderData(
           show: true,
-          border: const Border(
-            bottom: BorderSide(color: AppTheme.neutral200, width: 0.5),
-            left: BorderSide(color: AppTheme.neutral200, width: 0.5),
+          border: Border(
+            bottom: BorderSide(color: const Color(0xFFE7E0DA), width: 1),
+            left:   BorderSide(color: const Color(0xFFE7E0DA), width: 1),
           ),
         ),
         titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               interval: 1,
-              reservedSize: 28,
+              reservedSize: 30,
               getTitlesWidget: (v, _) => Text(
                 v.toStringAsFixed(0),
-                style: AppTheme.mono.copyWith(fontSize: 10),
+                style: AppTheme.mono.copyWith(
+                    fontSize: 10, color: AppTheme.neutral400),
               ),
             ),
           ),
@@ -693,141 +771,38 @@ class _MedResponseChart extends StatelessWidget {
               interval: 60,
               getTitlesWidget: (v, _) => Text(
                 '${v.toInt()}m',
-                style: AppTheme.mono.copyWith(fontSize: 10),
+                style: AppTheme.mono.copyWith(
+                    fontSize: 10, color: AppTheme.neutral400),
               ),
             ),
           ),
         ),
         lineBarsData: [
-          LineChartBarData(
-            spots: tremorSpots,
-            color: AppTheme.teal500,
-            barWidth: 2,
-            isCurved: true,
-            curveSmoothness: 0.3,
-            dotData: const FlDotData(show: false),
-          ),
-          LineChartBarData(
-            spots: bradySpots,
-            color: AppTheme.blue400,
-            barWidth: 2,
-            isCurved: true,
-            curveSmoothness: 0.3,
-            dotData: const FlDotData(show: false),
-          ),
-          LineChartBarData(
-            spots: dyskSpots,
-            color: AppTheme.amber400,
-            barWidth: 2,
-            isCurved: true,
-            curveSmoothness: 0.3,
-            dotData: const FlDotData(show: false),
-          ),
+          _line(tremorSpots, const Color(0xFF2D9E63), 2.5),
+          _line(bradySpots,  const Color(0xFF3B82D4), 2.5),
+          _line(dyskSpots,   const Color(0xFFE9A020), 2.0),
         ],
       ),
     );
   }
-}
 
-class _ClinicalLineChart extends StatelessWidget {
-  final List<SymptomSnapshot> snapshots;
-  final double Function(SymptomSnapshot) getValue;
-  final Color color;
-  final double? baseline;
-
-  const _ClinicalLineChart({
-    required this.snapshots,
-    required this.getValue,
-    required this.color,
-    this.baseline,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final spots = snapshots.asMap().entries.map((e) =>
-        FlSpot(e.key.toDouble(), getValue(e.value))).toList();
-
-    return SizedBox(
-      height: 160,
-      child: LineChart(
-        LineChartData(
-          minY: 0,
-          maxY: 4,
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            horizontalInterval: 1,
-            getDrawingHorizontalLine: (_) =>
-                FlLine(color: AppTheme.neutral100, strokeWidth: 0.5),
-          ),
-          borderData: FlBorderData(
-            show: true,
-            border: const Border(
-              bottom: BorderSide(color: AppTheme.neutral200, width: 0.5),
-              left: BorderSide(color: AppTheme.neutral200, width: 0.5),
-            ),
-          ),
-          titlesData: FlTitlesData(
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                interval: 1,
-                reservedSize: 28,
-                getTitlesWidget: (v, _) => Text(
-                  v.toStringAsFixed(0),
-                  style: AppTheme.mono.copyWith(fontSize: 10),
-                ),
-              ),
-            ),
-          ),
-          extraLinesData: baseline != null
-              ? ExtraLinesData(horizontalLines: [
-                  HorizontalLine(
-                    y: baseline!,
-                    color: AppTheme.neutral300,
-                    strokeWidth: 1,
-                    dashArray: [4, 4],
-                    label: HorizontalLineLabel(
-                      show: true,
-                      labelResolver: (_) => 'baseline',
-                      style: TextStyle(fontSize: 9, color: AppTheme.neutral400),
-                    ),
-                  ),
-                ])
-              : null,
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              color: color,
-              barWidth: 2,
-              isCurved: true,
-              curveSmoothness: 0.3,
-              dotData: FlDotData(
-                show: true,
-                getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                  radius: 3,
-                  color: color,
-                  strokeWidth: 1.5,
-                  strokeColor: Colors.white,
-                ),
-              ),
-              belowBarData: BarAreaData(
-                show: true,
-                color: color.withOpacity(0.07),
-              ),
-            ),
-          ],
-        ),
+  LineChartBarData _line(List<FlSpot> spots, Color color, double width) {
+    return LineChartBarData(
+      spots: spots,
+      color: color,
+      barWidth: width,
+      isCurved: true,
+      curveSmoothness: 0.35,
+      dotData: const FlDotData(show: false),
+      belowBarData: BarAreaData(
+        show: true,
+        color: color.withOpacity(0.05),
       ),
     );
   }
 }
-// ============================================================
-// TAB 4: GAIT
-// ============================================================
+
+// ══ TAB 4: GAIT ═══════════════════════════════════════════════
 class _GaitTab extends StatelessWidget {
   final Patient patient;
   final AppDataService svc;
@@ -838,133 +813,116 @@ class _GaitTab extends StatelessWidget {
     final gait = svc.getLatestGait(patient.id);
     final weeklyGait = svc.getWeeklyGait(patient.id);
 
-    if (gait == null) {
-      return const Center(child: Text('No gait data available.'));
-    }
+    if (gait == null) return const Center(
+        child: Text('No gait data available.',
+            style: TextStyle(color: AppTheme.neutral400)));
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
-        // Key gait metrics grid
-        const SectionHeader(title: 'Current gait metrics'),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.8,
-          children: [
-            MetricTile(
-              label: 'Stride length',
-              value: gait.strideLength.toStringAsFixed(2),
-              unit: 'm',
-              icon: Icons.straighten_rounded,
-            ),
-            MetricTile(
-              label: 'Step frequency',
-              value: gait.stepFrequency.toStringAsFixed(0),
-              unit: 'steps/min',
-              icon: Icons.speed_rounded,
-            ),
-            MetricTile(
-              label: 'Walking speed',
-              value: gait.walkingSpeed.toStringAsFixed(2),
-              unit: 'm/s',
-              icon: Icons.directions_walk_rounded,
-            ),
-            MetricTile(
-              label: 'Gait symmetry',
-              value: (gait.gaitSymmetry * 100).toStringAsFixed(0),
-              unit: '%',
-              valueColor: gait.gaitSymmetry > 0.80
-                  ? AppTheme.teal500
-                  : AppTheme.amber400,
-              icon: Icons.balance_rounded,
-            ),
-          ],
-        ),
+        _CardLabel('Current gait metrics'),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: _GaitMetricCard(
+            label: 'Stride length',
+            value: gait.strideLength.toStringAsFixed(2),
+            unit: 'm',
+            icon: Icons.straighten_rounded,
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: _GaitMetricCard(
+            label: 'Cadence',
+            value: gait.stepFrequency.toStringAsFixed(0),
+            unit: 'steps/min',
+            icon: Icons.speed_rounded,
+          )),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: _GaitMetricCard(
+            label: 'Walking speed',
+            value: gait.walkingSpeed.toStringAsFixed(2),
+            unit: 'm/s',
+            icon: Icons.directions_walk_rounded,
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: _GaitMetricCard(
+            label: 'Symmetry',
+            value: '${(gait.gaitSymmetry * 100).toStringAsFixed(0)}',
+            unit: '%',
+            icon: Icons.balance_rounded,
+            highlight: gait.gaitSymmetry > 0.80,
+          )),
+        ]),
+        const SizedBox(height: 20),
 
-        const SizedBox(height: 16),
-
-        // Arm swing score
-        const SectionHeader(title: 'Arm swing asymmetry'),
-        AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ScoreBar(
-                label: 'Arm swing reduction (MDS-UPDRS)',
-                score: gait.armSwingScore,
-                showLabel: false,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Score ${gait.armSwingScore.toStringAsFixed(1)} / 4.0 · '
-                '${gait.armSwingScore < 1.5 ? 'Normal' : gait.armSwingScore < 2.5 ? 'Mild reduction' : 'Significant reduction'}',
-                style: const TextStyle(
-                    fontSize: 12, color: AppTheme.neutral500),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // 7-day walking speed trend
-        const SectionHeader(title: '7-day walking speed'),
-        AppCard(
-          child: Column(
-            children: [
-              SizedBox(
-                height: 140,
-                child: _GaitTrendChart(
-                  weeklyGait: weeklyGait,
-                  getValue: (g) => g.walkingSpeed,
-                  color: AppTheme.teal500,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: weeklyGait.map((g) => Text(
-                  '${g.timestamp.day}/${g.timestamp.month}',
-                  style: const TextStyle(
-                      fontSize: 10, color: AppTheme.neutral400),
-                )).toList(),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // 7-day symmetry trend
-        const SectionHeader(title: '7-day gait symmetry'),
-        AppCard(
-          child: Column(
-            children: [
-              SizedBox(
-                height: 140,
-                child: _GaitTrendChart(
-                  weeklyGait: weeklyGait,
-                  getValue: (g) => g.gaitSymmetry * 4,
-                  color: AppTheme.blue400,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: weeklyGait.map((g) => Text(
-                  '${g.timestamp.day}/${g.timestamp.month}',
-                  style: const TextStyle(
-                      fontSize: 10, color: AppTheme.neutral400),
-                )).toList(),
-              ),
-            ],
-          ),
-        ),
+        _CardLabel('7-day walking speed'),
+        const SizedBox(height: 10),
+        _ClinicalCard(child: _GaitTrendChart(
+          weeklyGait: weeklyGait,
+          getValue: (g) => g.walkingSpeed,
+          color: const Color(0xFF2D9E63),
+        )),
       ],
+    );
+  }
+}
+
+class _GaitMetricCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String unit;
+  final IconData icon;
+  final bool highlight;
+  const _GaitMetricCard({
+    required this.label, required this.value,
+    required this.unit, required this.icon,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: highlight
+            ? const Color(0xFFEEF9F3)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1C1917).withOpacity(0.06),
+            blurRadius: 8, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18,
+              color: highlight
+                  ? const Color(0xFF1A6B3E)
+                  : AppTheme.neutral400),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value, style: AppTheme.monoLarge.copyWith(
+                  color: highlight
+                      ? const Color(0xFF1A6B3E)
+                      : AppTheme.neutral900,
+                  fontSize: 20)),
+              const SizedBox(width: 4),
+              Text(unit, style: const TextStyle(
+                  fontSize: 10, color: AppTheme.neutral400)),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(
+              fontSize: 11, color: AppTheme.neutral500,
+              fontWeight: FontWeight.w500)),
+        ],
+      ),
     );
   }
 }
@@ -974,38 +932,56 @@ class _GaitTrendChart extends StatelessWidget {
   final double Function(GaitMetrics) getValue;
   final Color color;
   const _GaitTrendChart({
-    required this.weeklyGait, required this.getValue, required this.color,
+    required this.weeklyGait,
+    required this.getValue,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    final spots = weeklyGait.asMap().entries.map((e) =>
-        FlSpot(e.key.toDouble(), getValue(e.value))).toList();
+    final spots = weeklyGait.asMap().entries
+        .map((e) => FlSpot(e.key.toDouble(), getValue(e.value)))
+        .toList();
 
-    return LineChart(
-      LineChartData(
-        minY: 0,
-        maxY: 4,
+    return SizedBox(
+      height: 140,
+      child: LineChart(LineChartData(
+        minY: 0, maxY: 2,
         gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: 1,
-          getDrawingHorizontalLine: (_) =>
-              FlLine(color: AppTheme.neutral100, strokeWidth: 0.5),
+          show: true, drawVerticalLine: false,
+          horizontalInterval: 0.5,
+          getDrawingHorizontalLine: (_) => FlLine(
+              color: const Color(0xFFF0EBE5), strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (v, _) {
+                final i = v.toInt();
+                if (i < 0 || i >= weeklyGait.length) {
+                  return const SizedBox.shrink();
+                }
+                final dt = weeklyGait[i].timestamp;
+                return Text('${dt.day}/${dt.month}',
+                    style: const TextStyle(
+                        fontSize: 9, color: AppTheme.neutral400));
+              },
+            ),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 1,
-              reservedSize: 24,
+              reservedSize: 28,
               getTitlesWidget: (v, _) => Text(
-                v.toStringAsFixed(0),
-                style: AppTheme.mono.copyWith(fontSize: 9),
+                v.toStringAsFixed(1),
+                style: AppTheme.mono.copyWith(
+                    fontSize: 9, color: AppTheme.neutral400),
               ),
             ),
           ),
@@ -1013,33 +989,25 @@ class _GaitTrendChart extends StatelessWidget {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            color: color,
-            barWidth: 2.5,
-            isCurved: true,
-            curveSmoothness: 0.3,
+            color: color, barWidth: 2.5,
+            isCurved: true, curveSmoothness: 0.3,
             dotData: FlDotData(
               show: true,
               getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                radius: 3,
-                color: color,
-                strokeWidth: 1.5,
-                strokeColor: Colors.white,
+                radius: 3, color: color,
+                strokeWidth: 2, strokeColor: Colors.white,
               ),
             ),
             belowBarData: BarAreaData(
-              show: true,
-              color: color.withOpacity(0.06),
-            ),
+              show: true, color: color.withOpacity(0.08)),
           ),
         ],
-      ),
+      )),
     );
   }
 }
 
-// ============================================================
-// TAB 5: REPORTS
-// ============================================================
+// ══ TAB 5: REPORTS ════════════════════════════════════════════
 class _ReportsTab extends StatelessWidget {
   final Patient patient;
   const _ReportsTab({required this.patient});
@@ -1047,31 +1015,25 @@ class _ReportsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
-        AppCard(
+        _ClinicalCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SectionHeader(title: 'Generate report'),
+              _CardLabel('Generate clinical report'),
+              const SizedBox(height: 8),
               const Text(
-                'Create a structured clinical report summarising recent symptom data, '
-                'medication response, and gait metrics for referral or record keeping.',
-                style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.neutral500,
-                    height: 1.4),
-              ),
+                'Export a structured report for referral or records. '
+                'Includes 7-day symptom trends, medication response '
+                'curve, gait analysis, and patient self-reports.',
+                style: TextStyle(fontSize: 13,
+                    color: AppTheme.neutral500, height: 1.4)),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('PDF generation coming soon'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PDF export coming soon'),
+                      behavior: SnackBarBehavior.floating)),
                 icon: const Icon(Icons.download_rounded, size: 18),
                 label: const Text('Download PDF report'),
               ),
@@ -1085,20 +1047,194 @@ class _ReportsTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        const SectionHeader(title: 'Report includes'),
-        AppCard(
-          child: Column(
-            children: const [
-              _ReportIncludesRow('7-day symptom trends', Icons.show_chart_rounded),
-              Divider(height: 20),
-              _ReportIncludesRow('Medication response curve', Icons.medication_rounded),
-              Divider(height: 20),
-              _ReportIncludesRow('Gait analysis summary', Icons.directions_walk_rounded),
-              Divider(height: 20),
-              _ReportIncludesRow('Patient self-report check-ins', Icons.sentiment_satisfied_alt_rounded),
-              Divider(height: 20),
-              _ReportIncludesRow('Baseline comparison', Icons.compare_arrows_rounded),
+        _CardLabel('Report includes'),
+        const SizedBox(height: 10),
+        _ClinicalCard(
+          padding: EdgeInsets.zero,
+          child: Column(children: [
+            _ReportRow('7-day symptom trends', Icons.show_chart_rounded),
+            const Divider(height: 0),
+            _ReportRow('Medication response curve', Icons.medication_rounded),
+            const Divider(height: 0),
+            _ReportRow('Gait analysis summary', Icons.directions_walk_rounded),
+            const Divider(height: 0),
+            _ReportRow('Patient self-report check-ins', Icons.sentiment_satisfied_alt_rounded),
+            const Divider(height: 0),
+            _ReportRow('Baseline comparison', Icons.compare_arrows_rounded),
+          ]),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReportRow extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  const _ReportRow(this.label, this.icon);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(children: [
+        Icon(icon, size: 18, color: const Color(0xFF2D9E63)),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label,
+            style: const TextStyle(fontSize: 13, color: AppTheme.neutral700))),
+        const Icon(Icons.check_rounded, size: 16,
+            color: Color(0xFF4CD97B)),
+      ]),
+    );
+  }
+}
+
+// ══ SHARED COMPONENTS ════════════════════════════════════════
+
+class _ClinicalCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsets? padding;
+  const _ClinicalCard({required this.child, this.padding});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1C1917).withOpacity(0.06),
+            blurRadius: 10, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _CardLabel extends StatelessWidget {
+  final String text;
+  const _CardLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.neutral500,
+            letterSpacing: 0.3));
+  }
+}
+
+class _BaselineCard extends StatelessWidget {
+  final String label;
+  final double current;
+  final double baseline;
+  const _BaselineCard({
+    required this.label,
+    required this.current,
+    required this.baseline,
+  });
+
+  double get _delta => current - baseline;
+  bool get _worse  => _delta >  0.2;
+  bool get _better => _delta < -0.2;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _worse
+        ? const Color(0xFFD94F4F)
+        : _better
+            ? const Color(0xFF2D9E63)
+            : AppTheme.neutral700;
+    final bg = _worse
+        ? const Color(0xFFFDF0F0)
+        : _better
+            ? const Color(0xFFEEF9F3)
+            : Colors.white;
+    final arrow = _worse ? '↑' : _better ? '↓' : '—';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1C1917).withOpacity(0.05),
+            blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 10, color: AppTheme.neutral500,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(current.toStringAsFixed(1),
+                  style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w800,
+                      color: color)),
+              const SizedBox(width: 3),
+              Text('$arrow${_delta.abs().toStringAsFixed(1)}',
+                  style: TextStyle(
+                      fontSize: 10, color: color,
+                      fontWeight: FontWeight.w600)),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClinicalScoreBar extends StatelessWidget {
+  final String label;
+  final double score;
+  const _ClinicalScoreBar(this.label, this.score);
+
+  Color get _color {
+    if (score < 1.0) return const Color(0xFF2D9E63);
+    if (score < 2.0) return const Color(0xFFE9A020);
+    if (score < 3.0) return const Color(0xFFE07030);
+    return const Color(0xFFD94F4F);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 13, color: AppTheme.neutral700,
+                    fontWeight: FontWeight.w500)),
+            Text(score.toStringAsFixed(1),
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700,
+                    color: _color)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: score / 4.0,
+            minHeight: 7,
+            backgroundColor: const Color(0xFFF0EBE5),
+            valueColor: AlwaysStoppedAnimation<Color>(_color),
           ),
         ),
       ],
@@ -1106,27 +1242,175 @@ class _ReportsTab extends StatelessWidget {
   }
 }
 
-class _ReportIncludesRow extends StatelessWidget {
+class _Legend extends StatelessWidget {
+  final Color color;
   final String label;
-  final IconData icon;
-  const _ReportIncludesRow(this.label, this.icon);
+  const _Legend({required this.color, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: AppTheme.teal500),
-        const SizedBox(width: 12),
-        Text(label,
-            style: const TextStyle(fontSize: 13, color: AppTheme.neutral700)),
-        const Spacer(),
-        const Icon(Icons.check_rounded,
-            size: 16, color: AppTheme.teal400),
-      ],
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 14, height: 3,
+          decoration: BoxDecoration(
+            color: color, borderRadius: BorderRadius.circular(2))),
+      const SizedBox(width: 5),
+      Text(label,
+          style: TextStyle(fontSize: 11, color: color,
+              fontWeight: FontWeight.w600)),
+    ]);
+  }
+}
+
+class _TH extends StatelessWidget {
+  final String text;
+  const _TH(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      child: Text(text, textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 11,
+              fontWeight: FontWeight.w700, color: AppTheme.neutral500)),
     );
   }
 }
 
-const neutral400 = Color(0xFF888780);
-const neutral600 = Color(0xFF5F5E5A);
-const neutral700 = Color(0xFF3D3D3A);
+class _ScoreCell extends StatelessWidget {
+  final double score;
+  const _ScoreCell(this.score);
+
+  Color get _color {
+    if (score < 1.0) return const Color(0xFF2D9E63);
+    if (score < 2.0) return const Color(0xFFE9A020);
+    if (score < 3.0) return const Color(0xFFE07030);
+    return const Color(0xFFD94F4F);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      child: Text(score.toStringAsFixed(1),
+          textAlign: TextAlign.center,
+          style: AppTheme.mono.copyWith(
+              fontSize: 13, color: _color,
+              fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+class _RichChart extends StatelessWidget {
+  final List<SymptomSnapshot> snapshots;
+  final double Function(SymptomSnapshot) getValue;
+  final Color color;
+  final double? baseline;
+  final String label;
+
+  const _RichChart({
+    required this.snapshots, required this.getValue,
+    required this.color, required this.label,
+    this.baseline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final spots = snapshots.asMap().entries
+        .map((e) => FlSpot(e.key.toDouble(), getValue(e.value)))
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 150,
+          child: LineChart(LineChartData(
+            minY: 0, maxY: 4,
+            gridData: FlGridData(
+              show: true, drawVerticalLine: false,
+              horizontalInterval: 1,
+              getDrawingHorizontalLine: (_) => FlLine(
+                  color: const Color(0xFFF0EBE5), strokeWidth: 1),
+            ),
+            extraLinesData: baseline != null
+                ? ExtraLinesData(horizontalLines: [
+                    HorizontalLine(
+                      y: baseline!,
+                      color: AppTheme.neutral300,
+                      strokeWidth: 1,
+                      dashArray: [5, 4],
+                      label: HorizontalLineLabel(
+                        show: true,
+                        labelResolver: (_) => 'baseline',
+                        style: const TextStyle(
+                            fontSize: 9, color: AppTheme.neutral400),
+                      ),
+                    ),
+                  ])
+                : null,
+            borderData: FlBorderData(
+              show: true,
+              border: Border(
+                bottom: BorderSide(
+                    color: const Color(0xFFE7E0DA), width: 1),
+                left: BorderSide(
+                    color: const Color(0xFFE7E0DA), width: 1),
+              ),
+            ),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  interval: 1,
+                  reservedSize: 26,
+                  getTitlesWidget: (v, _) => Text(
+                    v.toStringAsFixed(0),
+                    style: AppTheme.mono.copyWith(
+                        fontSize: 9, color: AppTheme.neutral400),
+                  ),
+                ),
+              ),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                color: color, barWidth: 2.5,
+                isCurved: true, curveSmoothness: 0.3,
+                dotData: FlDotData(
+                  show: true,
+                  getDotPainter: (_, __, ___, ____) =>
+                      FlDotCirclePainter(
+                    radius: 3.5, color: color,
+                    strokeWidth: 2, strokeColor: Colors.white,
+                  ),
+                ),
+                belowBarData: BarAreaData(
+                  show: true, color: color.withOpacity(0.08)),
+              ),
+            ],
+          )),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: snapshots.map((s) {
+            final diff = DateTime.now().difference(s.timestamp).inDays;
+            return Text(
+              diff == 0 ? 'Today'
+                  : diff == 1 ? 'Yest.'
+                  : '${s.timestamp.day}/${s.timestamp.month}',
+              style: const TextStyle(
+                  fontSize: 9, color: AppTheme.neutral400),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}

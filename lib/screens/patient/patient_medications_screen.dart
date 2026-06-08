@@ -16,9 +16,15 @@ class PatientMedicationsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.neutral50,
       appBar: AppBar(
-        title: const Text('Medications'),
-        backgroundColor: AppTheme.neutral50,
-        actions: [
+    title: const Text('Medications'),
+    backgroundColor: const Color(0xFF0F3D24),
+    foregroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        bottom: Radius.circular(24),
+      ),
+    ),
+    actions: [
           IconButton(
               icon: const Icon(Icons.info_outline_rounded, size: 20),
               onPressed: () {
@@ -310,9 +316,10 @@ class _DoseTimeline extends StatelessWidget {
                     child: Row(
                       children: [
                         Text(dose['time'] as String,
-                            style: AppTheme.mono.copyWith(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500)),
+                            style: const TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    color: AppTheme.neutral700)),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(dose['name'] as String,

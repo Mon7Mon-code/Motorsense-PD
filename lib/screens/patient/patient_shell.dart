@@ -6,6 +6,8 @@ import 'patient_checkin_screen.dart';
 import 'patient_my_week_screen.dart';
 import 'patient_appointments_screen.dart';
 import 'patient_device_screen.dart';
+import 'patient_episodes_screen.dart';
+import 'patient_settings_screen.dart';
 
 // ============================================================
 // PATIENT SHELL — bottom navigation container

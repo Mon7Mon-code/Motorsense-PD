@@ -13,10 +13,28 @@ class PatientDeviceScreen extends StatelessWidget {
     final device = svc.getDeviceStatus('p001');
 
     return Scaffold(
-      backgroundColor: AppTheme.neutral50,
-      appBar: AppBar(
-        title: const Text('My device'),
-        backgroundColor: AppTheme.neutral50,
+      backgroundColor: const Color(0xFFF2EDE8),
+                              appBar: AppBar(
+        backgroundColor: const Color(0xFF0F3D24),
+        foregroundColor: Colors.white,
+        title: const Text('My device',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700)),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
+          ),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
@@ -78,14 +96,14 @@ class PatientDeviceScreen extends StatelessWidget {
 
                   Row(
                     children: [
-                      _DeviceStatItem(
-                        icon: Icons.battery_std_rounded,
-                        label: 'Battery',
-                        value: '${device.batteryPercent}%',
-                        color: device.batteryPercent > 30
-                            ? AppTheme.teal500
-                            : AppTheme.amber400,
-                      ),
+                     _DeviceStatItem(
+  icon: Icons.battery_std_rounded,
+  label: 'Battery',
+  value: device.batteryPercent > 0
+      ? '${device.batteryPercent}%'
+      : 'Unknown',
+  color: AppTheme.neutral400,
+),
                       _DeviceStatItem(
                         icon: Icons.sync_rounded,
                         label: 'Last sync',
@@ -143,7 +161,7 @@ class PatientDeviceScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (device.batteryPercent < 30)
+               if (device.batteryPercent > 0 && device.batteryPercent < 30)
                   Container(
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(bottom: 12),

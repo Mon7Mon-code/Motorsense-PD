@@ -39,13 +39,13 @@ class AppCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: backgroundColor ?? Colors.white,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppTheme.neutral200, width: 0.5),
           ),
           padding: padding ?? Sp.cardPad,
@@ -86,7 +86,7 @@ class DeviceStatusBar extends StatelessWidget {
   final bool isConnected;
   final int batteryPercent;
   final DateTime? lastSync;
-  final bool isPatientView; // simplified for patients
+  final bool isPatientView;
 
   const DeviceStatusBar({
     super.key,
@@ -98,12 +98,6 @@ class DeviceStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final batteryColor = batteryPercent > 30
-        ? AppTheme.teal500
-        : batteryPercent > 15
-            ? AppTheme.amber400
-            : AppTheme.red400;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -136,16 +130,20 @@ class DeviceStatusBar extends StatelessWidget {
           if (isConnected) ...[
             const SizedBox(width: 10),
             const SizedBox(
-              height: 12, child: VerticalDivider(width: 1, thickness: 0.5)),
+                height: 12,
+                child: VerticalDivider(width: 1, thickness: 0.5)),
             const SizedBox(width: 10),
-            Icon(Icons.battery_std_rounded, size: 14, color: AppTheme.neutral300),
+            const Icon(Icons.battery_std_rounded,
+                size: 14, color: AppTheme.neutral300),
             const SizedBox(width: 3),
             Text(
-              batteryPercent > 0 ? '$batteryPercent%' : 'Battery unknown',
+              batteryPercent > 0
+                  ? '$batteryPercent%'
+                  : 'Battery unknown',
               style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.neutral400),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.neutral400),
             ),
           ],
         ],
@@ -154,7 +152,7 @@ class DeviceStatusBar extends StatelessWidget {
   }
 }
 
-// --- Metric tile (for clinician dashboard) ------------------
+// --- Metric tile --------------------------------------------
 class MetricTile extends StatelessWidget {
   final String label;
   final String value;
@@ -209,11 +207,11 @@ class MetricTile extends StatelessWidget {
   }
 }
 
-// --- Score bar (symptom severity) ---------------------------
+// --- Score bar ----------------------------------------------
 class ScoreBar extends StatelessWidget {
   final String label;
-  final double score; // 0.0–4.0
-  final bool showLabel; // patient gets text, clinician gets number
+  final double score;
+  final bool showLabel;
   const ScoreBar({
     super.key,
     required this.label,
@@ -296,4 +294,57 @@ class LabelledDivider extends StatelessWidget {
       ]),
     );
   }
+}
+
+// --- Gradient app bar — used by ALL screens -----------------
+class GradientAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final String title;
+  final List<Widget>? actions;
+
+  const GradientAppBar({super.key, required this.title, this.actions});
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBar(
+      title: Text(title,
+          style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700)),
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.white,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+          ),
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(24),
+            bottomRight: Radius.circular(24),
+          ),
+        ),
+      ),
+      actions: actions,
+    );
+  }
+}
+
+// --- Spacing constants --------------------------------------
+class Sp {
+  static const xs  = 4.0;
+  static const sm  = 8.0;
+  static const md  = 16.0;
+  static const lg  = 24.0;
+  static const xl  = 32.0;
+  static const xxl = 48.0;
+
+  static const screenPad = EdgeInsets.symmetric(horizontal: 20);
+  static const cardPad   = EdgeInsets.all(16);
+  static const sectionGap = SizedBox(height: 24);
+  static const itemGap    = SizedBox(height: 12);
 }
