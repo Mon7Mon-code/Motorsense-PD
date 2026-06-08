@@ -128,7 +128,7 @@ class _StatChip extends StatelessWidget {
           const SizedBox(width: 5),
           Text(label,
               style: TextStyle(
-                  fontSize: 12, color: color.withOpacity(0.8))),
+                  fontSize: 12, color: color.withValues(alpha:0.8))),
         ],
       ),
     );

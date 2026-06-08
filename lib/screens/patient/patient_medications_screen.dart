@@ -339,6 +339,3 @@ class _DoseTimeline extends StatelessWidget {
   }
 }
 
-extension on Color {
-  static const amber700 = Color(0xFF854F0B);
-}

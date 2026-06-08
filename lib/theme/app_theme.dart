@@ -274,12 +274,12 @@ class Sp {
 class AppShadow {
   static List<BoxShadow> get card => [
     BoxShadow(
-      color: const Color(0xFF1C1917).withOpacity(0.06),
+      color: const Color(0xFF1C1917).withValues(alpha:0.06),
       blurRadius: 12,
       offset: const Offset(0, 4),
     ),
     BoxShadow(
-      color: const Color(0xFF1C1917).withOpacity(0.03),
+      color: const Color(0xFF1C1917).withValues(alpha:0.03),
       blurRadius: 4,
       offset: const Offset(0, 1),
     ),
@@ -287,7 +287,7 @@ class AppShadow {
 
   static List<BoxShadow> get strong => [
     BoxShadow(
-      color: const Color(0xFF1C1917).withOpacity(0.12),
+      color: const Color(0xFF1C1917).withValues(alpha:0.12),
       blurRadius: 24,
       offset: const Offset(0, 8),
     ),
@@ -295,7 +295,7 @@ class AppShadow {
 
   static List<BoxShadow> get subtle => [
     BoxShadow(
-      color: const Color(0xFF1C1917).withOpacity(0.04),
+      color: const Color(0xFF1C1917).withValues(alpha:0.04),
       blurRadius: 8,
       offset: const Offset(0, 2),
     ),

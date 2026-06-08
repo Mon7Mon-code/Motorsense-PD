@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'ble_service.dart';
 import 'gait_dsp.dart';
 import 'gait_inference.dart';
-import 'signal_utils.dart';
 import 'bradykinesia_gait.dart';
 import 'gait_validation.dart';
 import 'phone_sensor_service.dart';

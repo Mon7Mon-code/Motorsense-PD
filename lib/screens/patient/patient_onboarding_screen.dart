@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_theme.dart';
 import '../../services/app_data_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/shared/shared_widgets.dart';
 import '../patient/patient_shell.dart';
 import '../../ble_service.dart';
-import '../../services/app_data_service.dart';
 
 // ============================================================
 // PATIENT ONBOARDING FLOW
@@ -156,14 +155,11 @@ class _OnboardingPage extends StatelessWidget {
   final String? buttonLabel;
   final VoidCallback? onNext;
   final VoidCallback? onBack;
-  final bool buttonEnabled;
-
   const _OnboardingPage({
     required this.child,
     this.buttonLabel,
     this.onNext,
     this.onBack,
-    this.buttonEnabled = true,
   });
 
   @override
@@ -182,7 +178,7 @@ class _OnboardingPage extends StatelessWidget {
             children: [
               if (buttonLabel != null)
                 ElevatedButton(
-                  onPressed: buttonEnabled ? onNext : null,
+                  onPressed: onNext,
                   style: ElevatedButton.styleFrom(
                     disabledBackgroundColor: AppTheme.neutral100,
                     disabledForegroundColor: AppTheme.neutral400,
@@ -465,7 +461,7 @@ class _DevicePageState extends State<_DevicePage> {
   @override
   Widget build(BuildContext context) {
     final ble = Provider.of<BleService>(context);
-    final isConnected = ble?.isActive ?? false;
+    final isConnected = ble.isActive;
 
     return _OnboardingPage(
       buttonLabel: isConnected ? 'Continue' : 'Skip for now',

@@ -4,7 +4,6 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../services/app_data_service.dart';
 import '../../theme/app_theme.dart';
 import '../../models/patient_data.dart';
-import '../../widgets/shared/shared_widgets.dart';
 
 // ============================================================
 // CLINICIAN PATIENT DASHBOARD v2 — Poster-worthy
@@ -39,13 +38,15 @@ class _ClinicianPatientDashboardState extends State<ClinicianPatientDashboard>
   Widget build(BuildContext context) {
     final svc     = Provider.of<AppDataService>(context);
     final patient = svc.getPatient(widget.patientId);
-    if (patient == null) return const Scaffold(
-        body: Center(child: Text('Patient not found')));
+    if (patient == null) {
+      return const Scaffold(
+          body: Center(child: Text('Patient not found')));
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2EDE8),
       body: NestedScrollView(
-        headerSliverBuilder: (_, __) => [
+        headerSliverBuilder: (_, _) => [
           _PatientSliverHeader(patient: patient, tabs: _tabs),
         ],
         body: TabBarView(
@@ -97,10 +98,10 @@ class _PatientSliverHeader extends StatelessWidget {
                       Container(
                         width: 52, height: 52,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha:0.15),
                           shape: BoxShape.circle,
                           border: Border.all(
-                              color: Colors.white.withOpacity(0.3), width: 1.5),
+                              color: Colors.white.withValues(alpha:0.3), width: 1.5),
                         ),
                         child: Center(
                           child: Text(
@@ -125,7 +126,7 @@ class _PatientSliverHeader extends StatelessWidget {
                               '${patient.age}y · Diagnosed ${patient.diagnosisYear} · ${patient.assignedClinicianId}',
                               style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.white.withOpacity(0.65)),
+                                  color: Colors.white.withValues(alpha:0.65)),
                             ),
                           ],
                         ),
@@ -227,9 +228,9 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha:0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4), width: 0.5),
+        border: Border.all(color: color.withValues(alpha:0.4), width: 0.5),
       ),
       child: Text(label,
           style: TextStyle(
@@ -250,9 +251,9 @@ class _MetricPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+        border: Border.all(color: Colors.white.withValues(alpha:0.15), width: 0.5),
       ),
       child: Column(
         children: [
@@ -262,7 +263,7 @@ class _MetricPill extends StatelessWidget {
           Text(label,
               style: TextStyle(
                   fontSize: 9,
-                  color: Colors.white.withOpacity(0.55),
+                  color: Colors.white.withValues(alpha:0.55),
                   fontWeight: FontWeight.w500)),
         ],
       ),
@@ -534,7 +535,7 @@ class _MedicationTab extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1A6B3E).withOpacity(0.3),
+                color: const Color(0xFF1A6B3E).withValues(alpha:0.3),
                 blurRadius: 12, offset: const Offset(0, 4)),
             ],
           ),
@@ -544,7 +545,7 @@ class _MedicationTab extends StatelessWidget {
               Container(
                 width: 36, height: 36,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha:0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.insights_rounded,
@@ -705,9 +706,11 @@ class _MedResponseChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (points.isEmpty) return const Center(
-        child: Text('Insufficient data', style: TextStyle(
-            color: AppTheme.neutral400)));
+    if (points.isEmpty) {
+      return const Center(
+          child: Text('Insufficient data', style: TextStyle(
+              color: AppTheme.neutral400)));
+    }
 
     final tremorSpots = points.map((p) =>
         FlSpot(p.minutesSinceDose, p.tremorScore)).toList();
@@ -737,7 +740,7 @@ class _MedResponseChart extends StatelessWidget {
           verticalRangeAnnotations: [
             VerticalRangeAnnotation(
               x1: 30, x2: 180,
-              color: const Color(0xFF2D9E63).withOpacity(0.06),
+              color: const Color(0xFF2D9E63).withValues(alpha:0.06),
             ),
           ],
         ),
@@ -796,7 +799,7 @@ class _MedResponseChart extends StatelessWidget {
       dotData: const FlDotData(show: false),
       belowBarData: BarAreaData(
         show: true,
-        color: color.withOpacity(0.05),
+        color: color.withValues(alpha:0.05),
       ),
     );
   }
@@ -813,9 +816,11 @@ class _GaitTab extends StatelessWidget {
     final gait = svc.getLatestGait(patient.id);
     final weeklyGait = svc.getWeeklyGait(patient.id);
 
-    if (gait == null) return const Center(
-        child: Text('No gait data available.',
-            style: TextStyle(color: AppTheme.neutral400)));
+    if (gait == null) {
+      return const Center(
+          child: Text('No gait data available.',
+              style: TextStyle(color: AppTheme.neutral400)));
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -848,7 +853,7 @@ class _GaitTab extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(child: _GaitMetricCard(
             label: 'Symmetry',
-            value: '${(gait.gaitSymmetry * 100).toStringAsFixed(0)}',
+            value: (gait.gaitSymmetry * 100).toStringAsFixed(0),
             unit: '%',
             icon: Icons.balance_rounded,
             highlight: gait.gaitSymmetry > 0.80,
@@ -891,7 +896,7 @@ class _GaitMetricCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C1917).withOpacity(0.06),
+            color: const Color(0xFF1C1917).withValues(alpha:0.06),
             blurRadius: 8, offset: const Offset(0, 3)),
         ],
       ),
@@ -993,13 +998,13 @@ class _GaitTrendChart extends StatelessWidget {
             isCurved: true, curveSmoothness: 0.3,
             dotData: FlDotData(
               show: true,
-              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+              getDotPainter: (_, _, _, _) => FlDotCirclePainter(
                 radius: 3, color: color,
                 strokeWidth: 2, strokeColor: Colors.white,
               ),
             ),
             belowBarData: BarAreaData(
-              show: true, color: color.withOpacity(0.08)),
+              show: true, color: color.withValues(alpha:0.08)),
           ),
         ],
       )),
@@ -1105,7 +1110,7 @@ class _ClinicalCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C1917).withOpacity(0.06),
+            color: const Color(0xFF1C1917).withValues(alpha:0.06),
             blurRadius: 10, offset: const Offset(0, 3)),
         ],
       ),
@@ -1164,7 +1169,7 @@ class _BaselineCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C1917).withOpacity(0.05),
+            color: const Color(0xFF1C1917).withValues(alpha:0.05),
             blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
@@ -1384,14 +1389,14 @@ class _RichChart extends StatelessWidget {
                 isCurved: true, curveSmoothness: 0.3,
                 dotData: FlDotData(
                   show: true,
-                  getDotPainter: (_, __, ___, ____) =>
+                  getDotPainter: (_, _, _, _) =>
                       FlDotCirclePainter(
                     radius: 3.5, color: color,
                     strokeWidth: 2, strokeColor: Colors.white,
                   ),
                 ),
                 belowBarData: BarAreaData(
-                  show: true, color: color.withOpacity(0.08)),
+                  show: true, color: color.withValues(alpha:0.08)),
               ),
             ],
           )),

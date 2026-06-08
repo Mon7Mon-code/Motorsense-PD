@@ -215,7 +215,7 @@ class _InsightTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.15), width: 0.5),
+        border: Border.all(color: color.withValues(alpha:0.15), width: 0.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +275,7 @@ class _PatientLineChart extends StatelessWidget {
             barWidth: 2.5,
             dotData: FlDotData(
               show: true,
-              getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+              getDotPainter: (spot, _, _, _) => FlDotCirclePainter(
                 radius: 3,
                 color: color,
                 strokeWidth: 1.5,
@@ -284,7 +284,7 @@ class _PatientLineChart extends StatelessWidget {
             ),
             belowBarData: BarAreaData(
               show: true,
-              color: color.withOpacity(0.07),
+              color: color.withValues(alpha:0.07),
             ),
           ),
         ],

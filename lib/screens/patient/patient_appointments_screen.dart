@@ -116,7 +116,7 @@ class _NextAppointmentHero extends StatelessWidget {
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.white.withValues(alpha:0.6),
                   letterSpacing: 0.3)),
           const SizedBox(height: 8),
           Text(daysLabel,
@@ -129,12 +129,12 @@ class _NextAppointmentHero extends StatelessWidget {
           Text(
             '${_formatDate(appointment.dateTime)} · ${_formatTime(appointment.dateTime)}',
             style: TextStyle(
-                fontSize: 14, color: Colors.white.withOpacity(0.8)),
+                fontSize: 14, color: Colors.white.withValues(alpha:0.8)),
           ),
           const SizedBox(height: 16),
           Container(
             height: 0.5,
-            color: Colors.white.withOpacity(0.15),
+            color: Colors.white.withValues(alpha:0.15),
           ),
           const SizedBox(height: 16),
           Row(

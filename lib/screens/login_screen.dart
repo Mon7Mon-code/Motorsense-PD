@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_data_service.dart';
 import '../theme/app_theme.dart';
-import 'patient/patient_shell.dart';
 import 'patient/patient_onboarding_screen.dart';
 import 'clinician/clinician_shell.dart';
 
@@ -50,10 +49,10 @@ class _LoginScreenState extends State<LoginScreen>
     );
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => asClinicianMode
+        pageBuilder: (_, _, _) => asClinicianMode
             ? const ClinicianShell()
             : PatientOnboardingScreen(),
-        transitionsBuilder: (_, anim, __, child) =>
+        transitionsBuilder: (_, anim, _, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 300),
       ),
@@ -84,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen>
                       color: AppTheme.teal600,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                          color: AppTheme.teal500.withOpacity(0.4), width: 1),
+                          color: AppTheme.teal500.withValues(alpha:0.4), width: 1),
                     ),
                     child: const Icon(Icons.monitor_heart_outlined,
                         color: Colors.white, size: 28),
@@ -98,14 +97,14 @@ class _LoginScreenState extends State<LoginScreen>
                   const SizedBox(height: 8),
                   Text('Continuous monitoring.\nSimplified.',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.white.withOpacity(0.65), height: 1.5)),
+                          color: Colors.white.withValues(alpha:0.65), height: 1.5)),
 
                   const Spacer(flex: 3),
 
                   // Role selection
                   Text('I am a...',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.white.withValues(alpha:0.5),
                           letterSpacing: 0.5)),
                   const SizedBox(height: 14),
 
@@ -130,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen>
                       'Imperial College London · Group 10',
                       style: TextStyle(
                           fontSize: 11,
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha:0.3),
                           letterSpacing: 0.3),
                     ),
                   ),
@@ -161,18 +160,18 @@ class _RoleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.08),
+      color: Colors.white.withValues(alpha:0.08),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
-        splashColor: Colors.white.withOpacity(0.05),
+        splashColor: Colors.white.withValues(alpha:0.05),
         child: Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-                color: Colors.white.withOpacity(0.15), width: 0.5),
+                color: Colors.white.withValues(alpha:0.15), width: 0.5),
           ),
           child: Row(
             children: [
@@ -180,7 +179,7 @@ class _RoleCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppTheme.teal500.withOpacity(0.25),
+                  color: AppTheme.teal500.withValues(alpha:0.25),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: AppTheme.teal100, size: 22),
@@ -198,13 +197,13 @@ class _RoleCard extends StatelessWidget {
                     Text(subtitle,
                         style: TextStyle(
                             fontSize: 13,
-                            color: Colors.white.withOpacity(0.55))),
+                            color: Colors.white.withValues(alpha:0.55))),
                   ],
                 ),
               ),
               Icon(Icons.arrow_forward_ios_rounded,
                   size: 14,
-                  color: Colors.white.withOpacity(0.3)),
+                  color: Colors.white.withValues(alpha:0.3)),
             ],
           ),
         ),

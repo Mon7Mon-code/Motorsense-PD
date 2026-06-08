@@ -42,12 +42,14 @@ class _PatientCheckInScreenState extends State<PatientCheckInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_submitted) return _SubmittedView(onNewCheckIn: () => setState(() {
-      _submitted = false;
-      _selectedFeeling = null;
-      _selectedSymptoms.clear();
-      _notesController.clear();
-    }));
+    if (_submitted) {
+      return _SubmittedView(onNewCheckIn: () => setState(() {
+        _submitted = false;
+        _selectedFeeling = null;
+        _selectedSymptoms.clear();
+        _notesController.clear();
+      }));
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2EDE8),
@@ -203,7 +205,7 @@ class _FeelingTile extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: selected ? color.withOpacity(0.12) : Colors.white,
+            color: selected ? color.withValues(alpha:0.12) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selected ? color : AppTheme.neutral200,

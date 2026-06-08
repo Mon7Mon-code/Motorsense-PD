@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import '../../services/app_data_service.dart';
 import '../../theme/app_theme.dart';
 import '../../models/patient_data.dart';
-import '../../widgets/shared/shared_widgets.dart';
-import 'patient_device_screen.dart';
 import 'patient_episodes_screen.dart';
 import 'patient_settings_screen.dart';
 
@@ -181,7 +179,7 @@ class _Hero extends StatelessWidget {
                     Text('ParkinsonsTracker',
                         style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.55),
+                            color: Colors.white.withValues(alpha:0.55),
                             fontWeight: FontWeight.w500)),
                   ]),
                   Row(children: [
@@ -205,7 +203,7 @@ class _Hero extends StatelessWidget {
                         Text(greeting,
                             style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.white.withOpacity(0.6))),
+                                color: Colors.white.withValues(alpha:0.6))),
                         const SizedBox(height: 2),
                         Text(name,
                             style: const TextStyle(
@@ -220,7 +218,7 @@ class _Hero extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha:0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(_wellnessLabel,
@@ -246,7 +244,7 @@ class _Hero extends StatelessWidget {
                           child: CircularProgressIndicator(
                             value: _wellness,
                             strokeWidth: 7,
-                            backgroundColor: Colors.white.withOpacity(0.15),
+                            backgroundColor: Colors.white.withValues(alpha:0.15),
                             valueColor: const AlwaysStoppedAnimation<Color>(
                                 Colors.white),
                             strokeCap: StrokeCap.round,
@@ -266,7 +264,7 @@ class _Hero extends StatelessWidget {
                             Text('/100',
                                 style: TextStyle(
                                     fontSize: 9,
-                                    color: Colors.white.withOpacity(0.55),
+                                    color: Colors.white.withValues(alpha:0.55),
                                     fontWeight: FontWeight.w500)),
                           ],
                         ),
@@ -289,7 +287,7 @@ class _Hero extends StatelessWidget {
                     shape: BoxShape.circle,
                     boxShadow: device.isConnected ? [
                       BoxShadow(
-                        color: const Color(0xFF4CD97B).withOpacity(0.6),
+                        color: const Color(0xFF4CD97B).withValues(alpha:0.6),
                         blurRadius: 6, spreadRadius: 1,
                       ),
                     ] : null,
@@ -302,7 +300,7 @@ class _Hero extends StatelessWidget {
                       : 'Device not connected',
                   style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.7),
+                      color: Colors.white.withValues(alpha:0.7),
                       fontWeight: FontWeight.w500),
                 ),
               ]),
@@ -326,7 +324,7 @@ class _Btn extends StatelessWidget {
       child: Container(
         width: 34, height: 34,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.13),
+          color: Colors.white.withValues(alpha:0.13),
           borderRadius: BorderRadius.circular(9),
         ),
         child: Icon(icon, color: Colors.white70, size: 17),
@@ -356,7 +354,7 @@ class _NextDoseBlock extends StatelessWidget {
         border: Border.all(color: const Color(0xFFFFE5A0), width: 0.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFE9A020).withOpacity(0.12),
+            color: const Color(0xFFE9A020).withValues(alpha:0.12),
             blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
@@ -438,7 +436,7 @@ class _CheckInBlock extends StatelessWidget {
           color: bg,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: color.withOpacity(0.2), width: 0.5),
+              color: color.withValues(alpha:0.2), width: 0.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,7 +447,7 @@ class _CheckInBlock extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: color.withOpacity(0.7),
+                    color: color.withValues(alpha:0.7),
                     letterSpacing: 0.3)),
             const SizedBox(height: 2),
             Text(checkIns.first.feelingLabel,
@@ -460,7 +458,7 @@ class _CheckInBlock extends StatelessWidget {
             Text('Today\'s check-in',
                 style: TextStyle(
                     fontSize: 11,
-                    color: color.withOpacity(0.6))),
+                    color: color.withValues(alpha:0.6))),
           ],
         ),
       );
@@ -477,7 +475,7 @@ class _CheckInBlock extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1A6B3E).withOpacity(0.3),
+            color: const Color(0xFF1A6B3E).withValues(alpha:0.3),
             blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
@@ -487,7 +485,7 @@ class _CheckInBlock extends StatelessWidget {
           Container(
             width: 38, height: 38,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha:0.2),
               borderRadius: BorderRadius.circular(11),
             ),
             child: const Icon(
@@ -513,7 +511,7 @@ class _CheckInBlock extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha:0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text('Tap to log',
@@ -560,10 +558,10 @@ class _SymptomBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: _bg,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _accent.withOpacity(0.15), width: 0.5),
+        border: Border.all(color: _accent.withValues(alpha:0.15), width: 0.5),
         boxShadow: [
           BoxShadow(
-            color: _accent.withOpacity(0.08),
+            color: _accent.withValues(alpha:0.08),
             blurRadius: 8, offset: const Offset(0, 3)),
         ],
       ),
@@ -582,7 +580,7 @@ class _SymptomBlock extends StatelessWidget {
           Text(label,
               style: TextStyle(
                   fontSize: 10,
-                  color: _accent.withOpacity(0.7),
+                  color: _accent.withValues(alpha:0.7),
                   fontWeight: FontWeight.w500)),
           const SizedBox(height: 6),
           ClipRRect(
@@ -590,7 +588,7 @@ class _SymptomBlock extends StatelessWidget {
             child: LinearProgressIndicator(
               value: score == 0 ? 0.04 : score / 4.0,
               minHeight: 4,
-              backgroundColor: _accent.withOpacity(0.12),
+              backgroundColor: _accent.withValues(alpha:0.12),
               valueColor: AlwaysStoppedAnimation<Color>(_accent),
             ),
           ),
@@ -661,7 +659,7 @@ class _WeekCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C1917).withOpacity(0.06),
+            color: const Color(0xFF1C1917).withValues(alpha:0.06),
             blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
@@ -745,7 +743,7 @@ class _ReassuranceBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isConnected
-              ? const Color(0xFF2D9E63).withOpacity(0.25)
+              ? const Color(0xFF2D9E63).withValues(alpha:0.25)
               : const Color(0xFFC4BDB8),
           width: 0.5,
         ),
