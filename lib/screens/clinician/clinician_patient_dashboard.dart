@@ -45,166 +45,249 @@ class _ClinicianPatientDashboardState extends State<ClinicianPatientDashboard>
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2EDE8),
-      body: NestedScrollView(
-        headerSliverBuilder: (_, _) => [
-          _PatientSliverHeader(patient: patient, tabs: _tabs),
+      body: Column(
+        children: [
+          // ── Floating header card ──────────────────────────────
+          _PatientHeaderCard(patient: patient, tabs: _tabs),
+          // ── Tab content ──────────────────────────────────────
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              children: [
+                _OverviewTab(patient: patient, svc: svc),
+                _SymptomsTab(patient: patient, svc: svc),
+                _MedicationTab(patient: patient, svc: svc),
+                _GaitTab(patient: patient, svc: svc),
+                _ReportsTab(patient: patient),
+              ],
+            ),
+          ),
         ],
-        body: TabBarView(
-          controller: _tabs,
-          children: [
-            _OverviewTab(patient: patient, svc: svc),
-            _SymptomsTab(patient: patient, svc: svc),
-            _MedicationTab(patient: patient, svc: svc),
-            _GaitTab(patient: patient, svc: svc),
-            _ReportsTab(patient: patient),
-          ],
-        ),
       ),
     );
   }
 }
 
-// ── Sliver header ─────────────────────────────────────────────
-class _PatientSliverHeader extends StatelessWidget {
+// ── Floating header card (matches screenshot style) ───────────
+class _PatientHeaderCard extends StatelessWidget {
   final Patient patient;
   final TabController tabs;
-  const _PatientSliverHeader({required this.patient, required this.tabs});
+  const _PatientHeaderCard({required this.patient, required this.tabs});
 
   @override
   Widget build(BuildContext context) {
-    return SliverAppBar(
-      expandedHeight: 220,
-      pinned: true,
-      backgroundColor: const Color(0xFF0F3D24),
-      foregroundColor: Colors.white,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
-            ),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 52, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      // Avatar
-                      Container(
-                        width: 52, height: 52,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha:0.15),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha:0.3), width: 1.5),
-                        ),
-                        child: Center(
-                          child: Text(
-                            patient.name.split(' ').map((w) => w[0]).take(2).join(),
-                            style: const TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w700,
-                                color: Colors.white),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(patient.name,
-                                style: const TextStyle(
-                                    fontSize: 20, fontWeight: FontWeight.w700,
-                                    color: Colors.white, letterSpacing: -0.3)),
-                            const SizedBox(height: 3),
-                            Text(
-                              '${patient.age}y · Diagnosed ${patient.diagnosisYear} · ${patient.assignedClinicianId}',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha:0.65)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _StatusBadge(flag: patient.statusFlag),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Metric pills row
-                  Row(
-                    children: [
-                      _MetricPill(
-                        label: 'Tremor',
-                        value: patient.latestSnapshot?.tremorScore
-                                .toStringAsFixed(1) ?? '—',
-                        color: _scoreColor(
-                            patient.latestSnapshot?.tremorScore ?? 0),
-                      ),
-                      const SizedBox(width: 8),
-                      _MetricPill(
-                        label: 'Brady.',
-                        value: patient.latestSnapshot?.bradykinesiaScore
-                                .toStringAsFixed(1) ?? '—',
-                        color: _scoreColor(
-                            patient.latestSnapshot?.bradykinesiaScore ?? 0),
-                      ),
-                      const SizedBox(width: 8),
-                      _MetricPill(
-                        label: 'Dysk.',
-                        value: patient.latestSnapshot?.dyskinesiaScore
-                                .toStringAsFixed(1) ?? '—',
-                        color: _scoreColor(
-                            patient.latestSnapshot?.dyskinesiaScore ?? 0),
-                      ),
-                      const SizedBox(width: 8),
-                      _MetricPill(
-                        label: 'Device',
-                        value: patient.deviceStatus.isConnected ? 'Live' : 'Off',
-                        color: patient.deviceStatus.isConnected
-                            ? const Color(0xFF4CD97B)
-                            : Colors.white38,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Container(
+      margin: EdgeInsets.zero,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0F3D24), Color(0xFF1A6B3E)],
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft:  Radius.circular(36),
+          bottomRight: Radius.circular(36),
         ),
       ),
-      bottom: TabBar(
-        controller: tabs,
-        isScrollable: true,
-        tabAlignment: TabAlignment.start,
-        labelColor: Colors.white,
-        unselectedLabelColor: Colors.white38,
-        indicatorColor: const Color(0xFF4CD97B),
-        indicatorWeight: 2.5,
-        labelStyle: const TextStyle(
-            fontSize: 13, fontWeight: FontWeight.w600),
-        unselectedLabelStyle: const TextStyle(
-            fontSize: 13, fontWeight: FontWeight.w400),
-        tabs: const [
-          Tab(text: 'Overview'),
-          Tab(text: 'Symptoms'),
-          Tab(text: 'Medication'),
-          Tab(text: 'Gait'),
-          Tab(text: 'Reports'),
-        ],
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, topPadding + 12, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top bar: back button + actions ──
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white, size: 16),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text('Clinician view',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontWeight: FontWeight.w500)),
+                const Spacer(),
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.more_horiz_rounded,
+                      color: Colors.white, size: 20),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // ── Patient name + score ring ──
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        patient.name,
+                        style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                            height: 1.1),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${patient.age}y · Dx ${patient.diagnosisYear} · ${patient.assignedClinicianId}',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Score ring — mirrors the 74/100 ring in the screenshot
+                _ScoreRing(
+                  score: patient.latestSnapshot != null
+                      ? _overallScore(patient.latestSnapshot!)
+                      : 0,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 14),
+
+            // ── Device status + status badge ──
+            Row(
+              children: [
+                Container(
+                  width: 7, height: 7,
+                  decoration: BoxDecoration(
+                    color: patient.deviceStatus.isConnected
+                        ? const Color(0xFF4CD97B)
+                        : Colors.white38,
+                    shape: BoxShape.circle,
+                    boxShadow: patient.deviceStatus.isConnected
+                        ? [BoxShadow(
+                            color: const Color(0xFF4CD97B).withValues(alpha: 0.6),
+                            blurRadius: 6)]
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  patient.deviceStatus.isConnected
+                      ? 'Device active · syncing live'
+                      : 'Device offline',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.7)),
+                ),
+                const Spacer(),
+                _StatusBadge(flag: patient.statusFlag),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── TabBar inside the card so it clips with the rounded corners ──
+            TabBar(
+              controller: tabs,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white38,
+              indicatorColor: const Color(0xFF4CD97B),
+              indicatorWeight: 2.5,
+              dividerColor: Colors.transparent,
+              labelStyle: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w400),
+              tabs: const [
+                Tab(text: 'Overview'),
+                Tab(text: 'Symptoms'),
+                Tab(text: 'Medication'),
+                Tab(text: 'Gait'),
+                Tab(text: 'Reports'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Color _scoreColor(double score) {
-    if (score < 1.0) return const Color(0xFF4CD97B);
-    if (score < 2.0) return const Color(0xFFE9A020);
-    if (score < 3.0) return const Color(0xFFE07030);
-    return const Color(0xFFD94F4F);
+  int _overallScore(SymptomSnapshot s) {
+    final avg = (s.tremorScore + s.bradykinesiaScore +
+                 s.dyskinesiaScore + s.rigidityScore) / 4;
+    return ((1 - avg / 4) * 100).round().clamp(0, 100);
+  }
+}
+
+// ── Score ring (matches the 74/100 circle in the screenshot) ──
+class _ScoreRing extends StatelessWidget {
+  final int score;
+  const _ScoreRing({required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 72, height: 72,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 72, height: 72,
+            child: CircularProgressIndicator(
+              value: score / 100,
+              strokeWidth: 5,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              strokeCap: StrokeCap.round,
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$score',
+                  style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1)),
+              Text('/100',
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -228,9 +311,9 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha:0.4), width: 0.5),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.5),
       ),
       child: Text(label,
           style: TextStyle(
@@ -251,9 +334,9 @@ class _MetricPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha:0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha:0.15), width: 0.5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
       ),
       child: Column(
         children: [
@@ -263,7 +346,7 @@ class _MetricPill extends StatelessWidget {
           Text(label,
               style: TextStyle(
                   fontSize: 9,
-                  color: Colors.white.withValues(alpha:0.55),
+                  color: Colors.white.withValues(alpha: 0.55),
                   fontWeight: FontWeight.w500)),
         ],
       ),
@@ -535,7 +618,7 @@ class _MedicationTab extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1A6B3E).withValues(alpha:0.3),
+                color: const Color(0xFF1A6B3E).withValues(alpha: 0.3),
                 blurRadius: 12, offset: const Offset(0, 4)),
             ],
           ),
@@ -545,7 +628,7 @@ class _MedicationTab extends StatelessWidget {
               Container(
                 width: 36, height: 36,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha:0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.insights_rounded,
@@ -755,12 +838,11 @@ class _MedResponseChart extends StatelessWidget {
               strokeWidth: 1,
               dashArray: [4, 4]),
         ),
-        // Shade the therapeutic window (30–180min)
         rangeAnnotations: RangeAnnotations(
           verticalRangeAnnotations: [
             VerticalRangeAnnotation(
               x1: 30, x2: 180,
-              color: const Color(0xFF2D9E63).withValues(alpha:0.06),
+              color: const Color(0xFF2D9E63).withValues(alpha: 0.06),
             ),
           ],
         ),
@@ -819,7 +901,7 @@ class _MedResponseChart extends StatelessWidget {
       dotData: const FlDotData(show: false),
       belowBarData: BarAreaData(
         show: true,
-        color: color.withValues(alpha:0.05),
+        color: color.withValues(alpha: 0.05),
       ),
     );
   }
@@ -916,7 +998,7 @@ class _GaitMetricCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C1917).withValues(alpha:0.06),
+            color: const Color(0xFF1C1917).withValues(alpha: 0.06),
             blurRadius: 8, offset: const Offset(0, 3)),
         ],
       ),
@@ -1044,7 +1126,7 @@ class _GaitTrendChart extends StatelessWidget {
               ),
             ),
             belowBarData: BarAreaData(
-              show: true, color: color.withValues(alpha:0.08)),
+              show: true, color: color.withValues(alpha: 0.08)),
           ),
         ],
       )),
@@ -1150,7 +1232,7 @@ class _ClinicalCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C1917).withValues(alpha:0.06),
+            color: const Color(0xFF1C1917).withValues(alpha: 0.06),
             blurRadius: 10, offset: const Offset(0, 3)),
         ],
       ),
@@ -1209,7 +1291,7 @@ class _BaselineCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1C1917).withValues(alpha:0.05),
+            color: const Color(0xFF1C1917).withValues(alpha: 0.05),
             blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
@@ -1456,7 +1538,7 @@ class _RichChart extends StatelessWidget {
                   ),
                 ),
                 belowBarData: BarAreaData(
-                  show: true, color: color.withValues(alpha:0.08)),
+                  show: true, color: color.withValues(alpha: 0.08)),
               ),
             ],
           )),
