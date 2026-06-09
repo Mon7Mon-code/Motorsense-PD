@@ -123,4 +123,4 @@ Metrics evaluated on a synthetic test set (n = 600). Tremor, gait/bradykinesia, 
 | Gait / Bradykinesia | 79.3% | 80.5% | 76.2% | 85.3% |
 | Dyskinesia | 76.8% | 77.9% | 73.5% | 83.1% |
 
-> **Note:** The models was trained and evaluated on PPMI-derived data with noise augmentation (synthetic test set, n = 600). Prospective real-world clinical validation is the intended next step.
+> **Note:** The models was trained and evaluated on PPMI-derived data with noise augmentation (synthetic test set, n = 600). Prospective real-world clinical validation is the next step.
