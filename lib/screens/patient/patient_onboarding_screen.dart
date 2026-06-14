@@ -30,6 +30,7 @@ class _PatientOnboardingScreenState extends State<PatientOnboardingScreen> {
   final _nameController = TextEditingController();
   final _diagnosisYearController = TextEditingController();
   String? _selectedSide = 'Left'; // dominant symptom side
+  String? _selectedDoctorId;
 
   // Medication setup
   final List<Map<String, dynamic>> _medications = [
@@ -72,6 +73,7 @@ class _PatientOnboardingScreenState extends State<PatientOnboardingScreen> {
       name:          _nameController.text.trim(),
       diagnosisYear: _diagnosisYearController.text.trim(),
       affectedSide:  _selectedSide ?? 'Left',
+      clinicianId:   _selectedDoctorId,
     );
     if (!mounted) return;
     nav.pushReplacement(
@@ -110,7 +112,12 @@ class _PatientOnboardingScreenState extends State<PatientOnboardingScreen> {
                     onNext: _nextPage,
                     onBack: _prevPage,
                   ),
-                  _DoctorPage(onNext: _nextPage, onBack: _prevPage),
+                  _DoctorPage(
+                    onNext: _nextPage,
+                    onBack: _prevPage,
+                    onDoctorSelected: (id) =>
+                        setState(() => _selectedDoctorId = id),
+                  ),
                   _BaselinePage(
                     onFinish: () => _finish(context),
                     onBack: _prevPage,
@@ -802,7 +809,12 @@ class _MedicationsPageState extends State<_MedicationsPage> {
 class _DoctorPage extends StatefulWidget {
   final VoidCallback onNext;
   final VoidCallback onBack;
-  const _DoctorPage({required this.onNext, required this.onBack});
+  final ValueChanged<String?> onDoctorSelected;
+  const _DoctorPage({
+    required this.onNext,
+    required this.onBack,
+    required this.onDoctorSelected,
+  });
 
   @override
   State<_DoctorPage> createState() => _DoctorPageState();
@@ -813,13 +825,6 @@ class _DoctorPageState extends State<_DoctorPage> {
   String _query = '';
   int? _selectedIndex;
 
-  static const _doctors = [
-    {'name': 'Dr. Sarah Chen', 'specialty': 'Neurologist', 'location': 'Riverside Neurology Clinic'},
-    {'name': 'Dr. Michael Adeyemi', 'specialty': 'Movement Disorder Specialist', 'location': 'St. Luke\'s Hospital'},
-    {'name': 'Dr. Priya Nair', 'specialty': 'Neurologist', 'location': 'Eastside Medical Centre'},
-    {'name': 'Dr. James O\'Connor', 'specialty': 'Geriatric Neurologist', 'location': 'Hillcrest Clinic'},
-    {'name': 'Dr. Elena Petrova', 'specialty': 'Movement Disorder Specialist', 'location': 'Northgate Health Centre'},
-  ];
 
   @override
   void dispose() {
@@ -836,7 +841,8 @@ class _DoctorPageState extends State<_DoctorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _doctors.where((doc) {
+    final svc = Provider.of<AppDataService>(context, listen: false);
+    final filtered = svc.getClinicianDirectory().where((doc) {
       if (_query.isEmpty) return true;
       final q = _query.toLowerCase();
       return doc['name']!.toLowerCase().contains(q) ||
@@ -881,7 +887,10 @@ class _DoctorPageState extends State<_DoctorPage> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: GestureDetector(
-                onTap: () => setState(() => _selectedIndex = index),
+                onTap: () {
+                  setState(() => _selectedIndex = index);
+                  widget.onDoctorSelected(doc['id']);
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   padding: const EdgeInsets.all(16),
@@ -954,7 +963,11 @@ class _DoctorPageState extends State<_DoctorPage> {
           const SizedBox(height: 8),
           Center(
             child: TextButton(
-              onPressed: widget.onNext,
+              onPressed: () {
+                setState(() => _selectedIndex = null);
+                widget.onDoctorSelected(null);
+                widget.onNext();
+              },
               child: const Text('Skip for now',
                   style: TextStyle(color: AppTheme.neutral500)),
             ),

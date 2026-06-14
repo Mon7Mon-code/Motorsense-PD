@@ -9,6 +9,7 @@ class LocalStorageService {
   static const _keyPatientName  = 'patient_name';
   static const _keyDiagYear     = 'patient_diagnosis_year';
   static const _keyAffectedSide = 'patient_affected_side';
+  static const _keyClinicianId  = 'patient_selected_clinician_id';
   static const _keyOnboardingTimestamp    = 'onboarding_timestamp';
   static const _keyBaselineElapsedSeconds = 'baseline_elapsed_seconds';
   static const _keyCheckIns     = 'check_ins_p001';
@@ -42,6 +43,7 @@ class LocalStorageService {
   String get patientName   => _prefs.getString(_keyPatientName)  ?? '';
   String get diagnosisYear => _prefs.getString(_keyDiagYear)     ?? '';
   String get affectedSide  => _prefs.getString(_keyAffectedSide) ?? 'Left';
+  String? get selectedClinicianId => _prefs.getString(_keyClinicianId);
   DateTime? get onboardingTimestamp {
     final s = _prefs.getString(_keyOnboardingTimestamp);
     return s == null ? null : DateTime.tryParse(s);
@@ -58,10 +60,14 @@ class LocalStorageService {
     required String name,
     required String diagnosisYear,
     required String affectedSide,
+    String? clinicianId,
   }) async {
     await _prefs.setString(_keyPatientName,  name);
     await _prefs.setString(_keyDiagYear,     diagnosisYear);
     await _prefs.setString(_keyAffectedSide, affectedSide);
+    if (clinicianId != null) {
+      await _prefs.setString(_keyClinicianId, clinicianId);
+    }
     await _prefs.setBool(_keyOnboarded, true);
     await _prefs.setString(
         _keyOnboardingTimestamp, DateTime.now().toIso8601String());

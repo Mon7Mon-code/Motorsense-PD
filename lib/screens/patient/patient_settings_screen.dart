@@ -113,6 +113,39 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
 
           const SizedBox(height: 24),
 
+          // ── Care team ────────────────────────────────────
+          const SectionHeader(title: 'Care team'),
+          AppCard(
+            padding: EdgeInsets.zero,
+            child: () {
+              final doctor = svc.selectedClinician;
+              if (doctor == null) {
+                return ListTile(
+                  leading: const Icon(Icons.person_outline_rounded,
+                      color: AppTheme.neutral500, size: 20),
+                  title: const Text('No doctor connected',
+                      style: TextStyle(fontSize: 14)),
+                  subtitle: const Text(
+                      'Connect with your doctor so they can follow your progress',
+                      style: TextStyle(fontSize: 12, color: AppTheme.neutral500)),
+                );
+              }
+              return ListTile(
+                leading: const Icon(Icons.person_rounded,
+                    color: AppTheme.teal600, size: 20),
+                title: Text(doctor['name']!,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w500)),
+                subtitle: Text(
+                    '${doctor['specialty']} · ${doctor['location']}',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppTheme.neutral500)),
+              );
+            }(),
+          ),
+
+          const SizedBox(height: 24),
+
           // ── Notifications ─────────────────────────────────
           const SectionHeader(title: 'Notifications'),
           AppCard(

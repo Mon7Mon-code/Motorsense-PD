@@ -113,11 +113,13 @@ class AppDataService extends ChangeNotifier {
     required String name,
     required String diagnosisYear,
     required String affectedSide,
+    String? clinicianId,
   }) async {
     await _storage.saveOnboardingProfile(
       name: name,
       diagnosisYear: diagnosisYear,
       affectedSide: affectedSide,
+      clinicianId: clinicianId,
     );
     notifyListeners();
   }
@@ -320,20 +322,44 @@ class AppDataService extends ChangeNotifier {
       _buildPatients().firstWhere((p) => p.id == patientId,
           orElse: () => _buildPatients().first);
 
+  // --- Clinician directory (for "Connect with your doctor") --
+  static const _clinicianDirectory = [
+    {'id': 'c001', 'name': 'Dr. Sarah Chen', 'specialty': 'Neurologist', 'location': 'Riverside Neurology Clinic'},
+    {'id': 'c002', 'name': 'Dr. Michael Adeyemi', 'specialty': 'Movement Disorder Specialist', 'location': 'St. Luke\'s Hospital'},
+    {'id': 'c003', 'name': 'Dr. Priya Nair', 'specialty': 'Neurologist', 'location': 'Eastside Medical Centre'},
+    {'id': 'c004', 'name': 'Dr. James O\'Connor', 'specialty': 'Geriatric Neurologist', 'location': 'Hillcrest Clinic'},
+    {'id': 'c005', 'name': 'Dr. Elena Petrova', 'specialty': 'Movement Disorder Specialist', 'location': 'Northgate Health Centre'},
+  ];
+
+  List<Map<String, String>> getClinicianDirectory() => _clinicianDirectory;
+
+  Map<String, String>? getClinicianById(String id) {
+    for (final c in _clinicianDirectory) {
+      if (c['id'] == id) return c;
+    }
+    return null;
+  }
+
+  Map<String, String>? get selectedClinician {
+    final id = _storage.selectedClinicianId;
+    if (id == null) return null;
+    return getClinicianById(id);
+  }
+
   List<Patient> _buildPatients() => [
     Patient(
       id: 'p001',
       name: _storage.patientName.isNotEmpty ? _storage.patientName : 'Patient',
       age: 68,
       diagnosisYear: _storage.diagnosisYear.isNotEmpty ? _storage.diagnosisYear : '2019',
-      assignedClinicianId: 'c001',
+      assignedClinicianId: _storage.selectedClinicianId ?? 'c001',
       deviceStatus:       getDeviceStatus('p001'),
       medications:        getMedications('p001'),
       weeklySnapshots:    getWeeklySnapshots('p001'),
       weeklyGait:         getWeeklyGait('p001'),
       medicationResponse: getMedicationResponse('p001'),
       checkIns:           getCheckIns('p001'),
-      appointments:       _staticAppointments,
+      appointments:       _buildAppointments(),
       latestSnapshot:     getLatestSnapshot('p001'),
       baselineSnapshot:   getBaseline('p001'),
     ),
@@ -515,7 +541,7 @@ class AppDataService extends ChangeNotifier {
     color: j['color'] as String,
   );
 
-  List<Appointment> getAppointments(String patientId) => _staticAppointments;
+  List<Appointment> getAppointments(String patientId) => _buildAppointments();
 
   // --- Static seed data --------------------------------------
 
@@ -607,21 +633,24 @@ class AppDataService extends ChangeNotifier {
     ];
   }
 
-  static final _staticAppointments = [
-    Appointment(id: 'a001', dateTime: DateTime(2026, 6, 18, 10, 30),
-        clinicianName: 'Dr. Sarah Okonkwo',
-        location: 'Movement Disorders Clinic, Floor 3',
-        type: 'routine', discussionPoints: [
-          'Tremor slightly increased since last visit',
-          'Review Levodopa timing based on wrist data',
-          'Discuss recent sleep quality from check-ins',
-        ]),
-    Appointment(id: 'a002', dateTime: DateTime(2026, 8, 5, 14, 0),
-        clinicianName: 'Dr. Sarah Okonkwo', location: 'Phone consultation',
-        type: 'phone', discussionPoints: [
-          '3-month progress review', 'Medication adjustment follow-up',
-        ]),
-  ];
+  List<Appointment> _buildAppointments() {
+    final clinicianName = selectedClinician?['name'] ?? 'Dr. Sarah Okonkwo';
+    return [
+      Appointment(id: 'a001', dateTime: DateTime(2026, 6, 18, 10, 30),
+          clinicianName: clinicianName,
+          location: 'Movement Disorders Clinic, Floor 3',
+          type: 'routine', discussionPoints: [
+            'Tremor slightly increased since last visit',
+            'Review Levodopa timing based on wrist data',
+            'Discuss recent sleep quality from check-ins',
+          ]),
+      Appointment(id: 'a002', dateTime: DateTime(2026, 8, 5, 14, 0),
+          clinicianName: clinicianName, location: 'Phone consultation',
+          type: 'phone', discussionPoints: [
+            '3-month progress review', 'Medication adjustment follow-up',
+          ]),
+    ];
+  }
 
 }
 
