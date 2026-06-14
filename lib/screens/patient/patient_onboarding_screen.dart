@@ -10,7 +10,7 @@ import '../patient/patient_shell.dart';
 
 // ============================================================
 // PATIENT ONBOARDING FLOW
-// 5 steps: Welcome → Profile → Device → Medications → Baseline
+// 6 steps: Welcome → Profile → Device → Medications → Doctor → Baseline
 // ============================================================
 
 class PatientOnboardingScreen extends StatefulWidget {
@@ -24,7 +24,7 @@ class PatientOnboardingScreen extends StatefulWidget {
 class _PatientOnboardingScreenState extends State<PatientOnboardingScreen> {
   final _pageController = PageController();
   int _currentPage = 0;
-  final int _totalPages = 5;
+  final int _totalPages = 6;
 
   // Collected data
   final _nameController = TextEditingController();
@@ -110,6 +110,7 @@ class _PatientOnboardingScreenState extends State<PatientOnboardingScreen> {
                     onNext: _nextPage,
                     onBack: _prevPage,
                   ),
+                  _DoctorPage(onNext: _nextPage, onBack: _prevPage),
                   _BaselinePage(
                     onFinish: () => _finish(context),
                     onBack: _prevPage,
@@ -796,7 +797,176 @@ class _MedicationsPageState extends State<_MedicationsPage> {
 }
 
 // ============================================================
-// PAGE 5: BASELINE
+// PAGE 5: CONNECT WITH YOUR DOCTOR
+// ============================================================
+class _DoctorPage extends StatefulWidget {
+  final VoidCallback onNext;
+  final VoidCallback onBack;
+  const _DoctorPage({required this.onNext, required this.onBack});
+
+  @override
+  State<_DoctorPage> createState() => _DoctorPageState();
+}
+
+class _DoctorPageState extends State<_DoctorPage> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  int? _selectedIndex;
+
+  static const _doctors = [
+    {'name': 'Dr. Sarah Chen', 'specialty': 'Neurologist', 'location': 'Riverside Neurology Clinic'},
+    {'name': 'Dr. Michael Adeyemi', 'specialty': 'Movement Disorder Specialist', 'location': 'St. Luke\'s Hospital'},
+    {'name': 'Dr. Priya Nair', 'specialty': 'Neurologist', 'location': 'Eastside Medical Centre'},
+    {'name': 'Dr. James O\'Connor', 'specialty': 'Geriatric Neurologist', 'location': 'Hillcrest Clinic'},
+    {'name': 'Dr. Elena Petrova', 'specialty': 'Movement Disorder Specialist', 'location': 'Northgate Health Centre'},
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  String _initials(String name) {
+    final parts = name.replaceAll('Dr. ', '').split(' ');
+    if (parts.length < 2) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
+        .toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _doctors.where((doc) {
+      if (_query.isEmpty) return true;
+      final q = _query.toLowerCase();
+      return doc['name']!.toLowerCase().contains(q) ||
+          doc['specialty']!.toLowerCase().contains(q) ||
+          doc['location']!.toLowerCase().contains(q);
+    }).toList();
+
+    return _OnboardingPage(
+      buttonLabel: 'Continue',
+      onNext: widget.onNext,
+      onBack: widget.onBack,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Connect with your doctor',
+              style: Theme.of(context).textTheme.displayMedium),
+          const SizedBox(height: 8),
+          Text(
+            'Search for your doctor or clinic so they can follow your progress. '
+            'You can also do this later.',
+            style: Theme.of(context)
+                .textTheme
+                .bodyLarge
+                ?.copyWith(color: AppTheme.neutral500),
+          ),
+          const SizedBox(height: 24),
+
+          TextField(
+            controller: _searchController,
+            onChanged: (v) => setState(() => _query = v),
+            decoration: const InputDecoration(
+              hintText: 'Search by name or clinic...',
+              prefixIcon: Icon(Icons.search_rounded),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          ...filtered.asMap().entries.map((entry) {
+            final index = entry.key;
+            final doc = entry.value;
+            final selected = _selectedIndex == index;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedIndex = index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: selected ? AppTheme.teal50 : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: selected
+                          ? AppTheme.teal200
+                          : AppTheme.neutral200,
+                      width: selected ? 1.5 : 0.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.teal50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            _initials(doc['name']!),
+                            style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.teal700),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(doc['name']!,
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600)),
+                            Text(doc['specialty']!,
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppTheme.neutral500)),
+                            Text(doc['location']!,
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppTheme.neutral500)),
+                          ],
+                        ),
+                      ),
+                      if (selected)
+                        const Icon(Icons.check_circle_rounded,
+                            color: AppTheme.teal500, size: 22),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+
+          if (filtered.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                'No doctors found. You can connect with your doctor later.',
+                style: const TextStyle(
+                    fontSize: 13, color: AppTheme.neutral500, height: 1.4),
+              ),
+            ),
+
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
+              onPressed: widget.onNext,
+              child: const Text('Skip for now',
+                  style: TextStyle(color: AppTheme.neutral500)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// PAGE 6: BASELINE
 // ============================================================
 class _BaselinePage extends StatefulWidget {
   final VoidCallback onFinish;
