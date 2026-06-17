@@ -230,7 +230,7 @@ void loop() {
         if (written > 0) batchLen += written;
         batchCount++;
 
-        // Send batch every 6 samples (200ms)
+        // Send batch every 6 samples (~120ms)
         if (batchCount >= BLE_BATCH_SIZE) {
             if (Bluefruit.connected() && imuChar.notifyEnabled()) {
                 imuChar.notify((uint8_t*)bleBatch, batchLen);
