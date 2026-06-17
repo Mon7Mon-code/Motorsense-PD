@@ -10,7 +10,7 @@ A Parkinson's disease symptom monitoring system built as an MEng group project a
 Seeed XIAO nRF52840 Sense (wrist-worn)
   LSM6DS3 IMU @ 50 Hz — CSV-batched over BLE
         │
-        │  BLE (GATT, 10 samples per notification ~200 ms)
+        │  BLE (GATT, 6 samples per notification ~200 ms)
         ▼
 Flutter App (Android / iOS)
         │
