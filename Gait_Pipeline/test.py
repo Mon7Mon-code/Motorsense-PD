@@ -1,0 +1,1 @@
+import pandas as pd; df=pd.read_csv('Gait_Data___Arm_swing__Opals__31May2026.csv'); cols=['RA_AMP_U','LA_AMP_U','SYM_U','ASA_U','SW_VEL_OP','SW_PATH_OP','SW_FREQ_OP']; print(df[cols].isnull().sum().to_string()); print('\ntotal rows:',len(df)); print('\nRA_AMP_U stats:'); print(df['RA_AMP_U'].describe())
