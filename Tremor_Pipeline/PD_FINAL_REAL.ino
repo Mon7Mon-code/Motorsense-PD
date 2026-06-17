@@ -6,7 +6,7 @@
 //  Service        : A1B2C3D4-E5F6-7890-ABCD-EF1234567890
 //  Characteristic : B2C3D4E5-F6A7-8901-BCDE-F12345678901
 //
-// BLE format (one line per sample, 10 samples per notify):
+// BLE format (one line per sample, 6 samples per notify):
 //   ax_rms,log_power,dom_freq,p_tremor,severity,accX,accY,accZ,gyrX,gyrY,gyrZ
 //   e.g. 0.1234,-1.2345,5,0.8732,MODERATE,9.8100,0.1234,-0.2345,0.0012,0.0034,-0.0056
 //
@@ -230,7 +230,7 @@ void loop() {
         if (written > 0) batchLen += written;
         batchCount++;
 
-        // Send batch every 10 samples (200ms)
+        // Send batch every 6 samples (200ms)
         if (batchCount >= BLE_BATCH_SIZE) {
             if (Bluefruit.connected() && imuChar.notifyEnabled()) {
                 imuChar.notify((uint8_t*)bleBatch, batchLen);

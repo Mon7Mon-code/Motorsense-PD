@@ -101,7 +101,7 @@ When not flagged, severity is `NONE`.
 - **Service UUID:** `A1B2C3D4-E5F6-7890-ABCD-EF1234567890`
 - **Characteristic UUID:** `B2C3D4E5-F6A7-8901-BCDE-F12345678901` (Read | Notify)
 
-Each notification batches several CSV lines, one per sample. Each line has 11 fields:
+Each notification batches 6 CSV lines (one per sample, ~120 ms per batch at 50 Hz). Each line has 11 fields:
 
 ```
 ax_rms,log_power,dom_freq,p_tremor,severity,accX,accY,accZ,gyrX,gyrY,gyrZ

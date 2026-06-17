@@ -4,70 +4,40 @@ A Parkinson's disease symptom monitoring system built as an MEng group project a
 
 > **Naming note:** "MotorSense PD" is the project-level name used in this repository. The final report refers to the same system as **PD-Monitor** — this is also the literal BLE device name advertised by the firmware (`Bluefruit.setName("PD-Monitor")`). The Flutter app itself is branded **ParkinsonsTracker** on-screen (login, onboarding, home screen) and in the `ParkinsonsTrackerApp` class name. All three names refer to one system: MotorSense PD (project) → PD-Monitor (wristband/BLE) → ParkinsonsTracker (app UI).
 
----
-
 ## System Architecture
 
+```
 Seeed XIAO nRF52840 Sense (wrist-worn)
-
-LSM6DS3 IMU @ 50 Hz — CSV-batched over BLE
-
-│
-
-│  BLE (GATT, 6 samples per notification ~120 ms)
-
-▼
-
+  LSM6DS3 IMU @ 50 Hz — CSV-batched over BLE
+        │
+        │  BLE (GATT, 6 samples per notification ~120 ms)
+        ▼
 Flutter App (Android / iOS)
-
-│
-
-├── TremorPipeline
-
-│     ├── Tremor: firmware-side classifier → CSV row ingested via BLE
-
-│     │     (ax_rms, log_power, dom_freq, p_tremor, severity)
-
-│     └── Dyskinesia: app-side multi-feature Goertzel classifier
-
-│           Stage 1 gate: band power ratio (1–3 Hz) + lag-1 autocorrelation
-
-│           Stage 2: spectral entropy + RMS amplitude + jerk
-
-│           Persistence filter: 3 consecutive positive ticks (~6 s)
-
-│
-
-├── GaitPipeline (dual-sensor fusion)
-
-│     ├── Wrist IMU → arm swing amplitude (L/R), symmetry, ASA, sway
-
-│     │     (gyroscope integration per zero-crossing cycle, detrended)
-
-│     ├── Phone accelerometer → cadence, stride time CV, step asymmetry,
-
-│     │     sample entropy, walking bouts, activity level
-
-│     └── GaitInferenceEngine
-
-│           Dart: median imputation + StandardScaler (scaler_params.json)
-
-│           Kotlin MethodChannel → PyTorch Mobile (.ptl)
-
-│           27-feature input vector → impairment probability + severity band
-
-│
-
-└── BradykinesiaGaitScorer
-
-Weighted percentile-band scoring (PPMI-calibrated)
-
-walking speed (0.20) · stride length (0.20)
-
-arm swing amplitude (0.35) · arm swing velocity (0.25)
-
-→ composite severity 0–4
-
+        │
+        ├── TremorPipeline
+        │     ├── Tremor: firmware-side classifier → CSV row ingested via BLE
+        │     │     (ax_rms, log_power, dom_freq, p_tremor, severity)
+        │     └── Dyskinesia: app-side multi-feature Goertzel classifier
+        │           Stage 1 gate: band power ratio (1–3 Hz) + lag-1 autocorrelation
+        │           Stage 2: spectral entropy + RMS amplitude + jerk
+        │           Persistence filter: 3 consecutive positive ticks (~6 s)
+        │
+        ├── GaitPipeline (dual-sensor fusion)
+        │     ├── Wrist IMU → arm swing amplitude (L/R), symmetry, ASA, sway
+        │     │     (gyroscope integration per zero-crossing cycle, detrended)
+        │     ├── Phone accelerometer → cadence, stride time CV, step asymmetry,
+        │     │     sample entropy, walking bouts, activity level
+        │     └── GaitInferenceEngine
+        │           Dart: median imputation + StandardScaler (scaler_params.json)
+        │           Kotlin MethodChannel → PyTorch Mobile (.ptl)
+        │           27-feature input vector → impairment probability + severity band
+        │
+        └── BradykinesiaGaitScorer
+              Weighted percentile-band scoring (PPMI-calibrated)
+              walking speed (0.20) · stride length (0.20)
+              arm swing amplitude (0.35) · arm swing velocity (0.25)
+              → composite severity 0–4
+```
 
 ---
 
