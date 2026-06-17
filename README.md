@@ -48,7 +48,7 @@ Flutter App (Android / iOS)
 | MCU | Seeed XIAO nRF52840 Sense |
 | IMU | LSM6DS3 — accelerometer + gyroscope |
 | ODR | 50 Hz over BLE (hardware ODR: 104 Hz) |
-| BLE | Custom GATT service; 10 CSV samples batched per notification |
+| BLE | Custom GATT service; 6 CSV samples batched per notification |
 | Battery | Standard BLE Battery Service (live % in app) |
 | Placement | Wrist-worn |
 
